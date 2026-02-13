@@ -12,7 +12,6 @@ export const parseContextFromNotebook = async (
     () => notebook
   );
 
-  // TODO plugin config type
   // Extract all unique links from all cells
   const allLinks = new Set<string>();
   notebook.forEach(cell => {

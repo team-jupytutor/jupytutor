@@ -17,8 +17,7 @@ export interface JupytutorProps {
   activeIndex: number;
 }
 
-// big TODO -- chat history no longer clears. maybe would be good if there were a way to force-clear?
-// not sure if the chat context is actually updating when we update the cell value
+// PRTODO - check: not sure if the chat context is actually updating when we update the cell value
 
 export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   const widgetState = useWidgetState();

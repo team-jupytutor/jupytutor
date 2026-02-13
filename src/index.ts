@@ -135,6 +135,103 @@ const refreshNotebookParse = (notebookPath: string, notebook: Notebook) => {
   );
 };
 
+const attachNotebook = async (
+  _notebookTracker: INotebookTracker,
+  notebookPanel: NotebookPanel | null
+) => {
+  try {
+    if (!notebookPanel) {
+      console.warn('No active notebook found for context gathering');
+      return;
+    }
+
+    devLog(
+      () => 'Notebook path:',
+      () => notebookPanel.context.path
+    );
+
+    await notebookPanel.context.ready;
+    await notebookPanel.revealed;
+
+    const notebook = notebookPanel.content;
+    const notebookModel = notebook.model;
+    if (!notebookModel) {
+      console.warn('No notebook model found for context gathering');
+      return;
+    }
+
+    const detachMetadata = attachNotebookMetadata(
+      notebookPanel.context.path,
+      notebookModel
+    );
+
+    const notebookConfig = loadConfigurationFromNotebookModel(notebookModel);
+
+    // Skip context gathering if activation flag criteria not met
+    if (!notebookConfig.pluginEnabled) {
+      devLog(
+        () =>
+          'Activation flag not found in notebook. Skipping context gathering.'
+      );
+      return;
+    }
+
+    // Parse the notebook to get all cells and their links
+    const allCells = parseNB(notebook);
+
+    devLog(
+      () => 'Gathered all cells from notebook on initial load.',
+      () => allCells
+    );
+
+    useJupytutorReactState
+      .getState()
+      .setNotebookParsedCells(notebookPanel.context.path)(allCells);
+
+    const globalNotebookContextRetriever = await parseContextFromNotebook(
+      allCells,
+      notebookConfig
+    );
+    useJupytutorReactState
+      .getState()
+      .setGlobalNotebookContextRetriever(notebookPanel.context.path)(
+      globalNotebookContextRetriever
+    );
+
+    devLog(() => 'Textbook Context Gathering Completed\n');
+
+    devLog(
+      () => 'Starting Textbook Prompt:\n',
+      () => STARTING_TEXTBOOK_CONTEXT
+    );
+
+    devLog(
+      () => 'Textbook Context Snippet:\n',
+      async () =>
+        (await globalNotebookContextRetriever?.getContext())?.substring(
+          STARTING_TEXTBOOK_CONTEXT.length,
+          STARTING_TEXTBOOK_CONTEXT.length + 500
+        )
+    );
+
+    devLog(
+      () => 'Textbook Context Length:\n',
+      async () => (await globalNotebookContextRetriever?.getContext())?.length
+    );
+
+    devLog(
+      () => 'Textbook Source Links:\n',
+      async () => await globalNotebookContextRetriever?.getSourceLinks()
+    );
+
+    // TODO use this detach
+    return detachMetadata;
+  } catch (error) {
+    // TODO finally return detach
+    console.error('Error gathering context:', error);
+  }
+};
+
 /**
  * Initialization data for the jupytutor extension.
  */
@@ -163,110 +260,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Get the DataHub user identifier
     const userId = getUserIdentifierFromURL();
     useJupytutorReactState.setState({ userId });
-
-    let pluginEnabled: boolean = false;
-
-    const attachNotebook = async (
-      _notebookTracker: INotebookTracker,
-      notebookPanel: NotebookPanel | null
-    ) => {
-      try {
-        if (!notebookPanel) {
-          console.warn('No active notebook found for context gathering');
-          return;
-        }
-
-        devLog(
-          () => 'Notebook path:',
-          () => notebookPanel.context.path
-        );
-
-        await notebookPanel.context.ready;
-        await notebookPanel.revealed;
-
-        const notebook = notebookPanel.content;
-        const notebookModel = notebook.model;
-        if (!notebookModel) {
-          console.warn('No notebook model found for context gathering');
-          return;
-        }
-
-        const detachMetadata = attachNotebookMetadata(
-          notebookPanel.context.path,
-          notebookModel
-        );
-
-        const notebookConfig =
-          loadConfigurationFromNotebookModel(notebookModel);
-
-        // TODO: listen for changes
-        pluginEnabled = notebookConfig.pluginEnabled;
-
-        // Skip context gathering if activation flag criteria not met
-        if (!pluginEnabled) {
-          devLog(
-            () =>
-              'Activation flag not found in notebook. Skipping context gathering.'
-          );
-          return;
-        }
-
-        // Parse the notebook to get all cells and their links
-        const allCells = parseNB(notebook);
-
-        devLog(
-          () => 'Gathered all cells from notebook on initial load.',
-          () => allCells
-        );
-
-        useJupytutorReactState
-          .getState()
-          .setNotebookParsedCells(notebookPanel.context.path)(allCells);
-
-        const globalNotebookContextRetriever = await parseContextFromNotebook(
-          allCells,
-          notebookConfig
-        );
-        useJupytutorReactState
-          .getState()
-          .setGlobalNotebookContextRetriever(notebookPanel.context.path)(
-          globalNotebookContextRetriever
-        );
-
-        devLog(() => 'Textbook Context Gathering Completed\n');
-
-        devLog(
-          () => 'Starting Textbook Prompt:\n',
-          () => STARTING_TEXTBOOK_CONTEXT
-        );
-
-        devLog(
-          () => 'Textbook Context Snippet:\n',
-          async () =>
-            (await globalNotebookContextRetriever?.getContext())?.substring(
-              STARTING_TEXTBOOK_CONTEXT.length,
-              STARTING_TEXTBOOK_CONTEXT.length + 500
-            )
-        );
-
-        devLog(
-          () => 'Textbook Context Length:\n',
-          async () =>
-            (await globalNotebookContextRetriever?.getContext())?.length
-        );
-
-        devLog(
-          () => 'Textbook Source Links:\n',
-          async () => await globalNotebookContextRetriever?.getSourceLinks()
-        );
-
-        // TODO use this detach
-        return detachMetadata;
-      } catch (error) {
-        // TODO finally return detach
-        console.error('Error gathering context:', error);
-      }
-    };
 
     // Gather context when a notebook is opened or becomes active
     notebookTracker.currentChanged.connect(attachNotebook);
