@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import z from 'zod';
 import { ChatHistoryItem } from '../../components/ChatMessage';
@@ -131,7 +131,7 @@ export const useQueryAPIFunction = (relativeTo: number) => {
   );
   const instructorNote = useCellConfig()?.instructorNote ?? null;
 
-  const localContext = useQuery({
+  const queryOptions = {
     queryKey: [
       'localContext',
       parsedCells,
@@ -149,7 +149,8 @@ export const useQueryAPIFunction = (relativeTo: number) => {
       );
       return context;
     }
-  });
+  };
+  const queryClient = useQueryClient();
 
   const [chatHistory, setChatHistory] = useChatHistory();
   const [, setLiveResult] = useLiveResult();
@@ -178,8 +179,8 @@ export const useQueryAPIFunction = (relativeTo: number) => {
 
       try {
         // PRTODO broken
-        // await localContext.promise;
-        const localContextData = localContext.data ?? [];
+        const localContextData =
+          (await queryClient.ensureQueryData(queryOptions)) ?? [];
         const chatHistoryToSend = [...localContextData, ...chatHistory];
 
         const imageFiles = images.map((image, index) => {
@@ -292,6 +293,7 @@ export const useQueryAPIFunction = (relativeTo: number) => {
       setIsLoading(false);
     },
     [
+      queryClient,
       chatHistory,
       setChatHistory,
       setLiveResult,
@@ -303,7 +305,6 @@ export const useQueryAPIFunction = (relativeTo: number) => {
       parsedCells,
       instructorNote,
       relativeTo,
-      localContext,
       sendTextbookWithRequest
     ]
   );

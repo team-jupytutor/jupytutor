@@ -17,8 +17,6 @@ export interface JupytutorProps {
   activeIndex: number;
 }
 
-// PRTODO - check: not sure if the chat context is actually updating when we update the cell value
-
 export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   const widgetState = useWidgetState();
   const quickResponses = useCellConfig()?.quickResponses ?? [];
