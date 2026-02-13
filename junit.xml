@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="1" failures="0" errors="0" time="3.111">
-  <testsuite name="jupytutor" errors="0" failures="0" skipped="0" timestamp="2026-02-13T01:54:24" time="2.367" tests="1">
-    <testcase classname="jupytutor should be tested" name="jupytutor should be tested" time="0.002">
-    </testcase>
-  </testsuite>
-</testsuites>
