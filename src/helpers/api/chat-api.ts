@@ -177,7 +177,7 @@ export const useQueryAPIFunction = (relativeTo: number) => {
       }
 
       try {
-        // TODO broken
+        // PRTODO broken
         // await localContext.promise;
         const localContextData = localContext.data ?? [];
         const chatHistoryToSend = [...localContextData, ...chatHistory];
@@ -374,7 +374,6 @@ const gatherLocalContext = async (
   const filteredCells = allCells.filter(
     cell =>
       cell.imageSources.length > 0 || cell.text !== '' || cell.text != null
-    // TODO // || cell.outputText != null
   );
   const newActiveIndex = filteredCells.findIndex(cell => cell === activeCell);
   return createChatContextFromCells(
