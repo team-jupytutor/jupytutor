@@ -38,6 +38,7 @@ type NotebookState = {
 type JupytutorReactState = {
   patchKeyCommand750: boolean;
   userId: string | null;
+  jupyterhubHostname: string | null;
 
   notebookStateByPath: Record<string, NotebookState>;
 
@@ -105,6 +106,7 @@ export const useJupytutorReactState = create<JupytutorReactState>()(
   subscribeWithSelector(set => ({
     patchKeyCommand750: false,
     userId: null,
+    jupyterhubHostname: null,
 
     notebookStateByPath: {} as Record<string, NotebookState>,
     setChatHistory:

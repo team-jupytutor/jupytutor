@@ -257,9 +257,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     patchKeyCommand750(app);
 
-    // Get the DataHub user identifier
+    // Get the DataHub user identifier and JupyterHub hostname
     const userId = getUserIdentifierFromURL();
-    useJupytutorReactState.setState({ userId });
+    const jupyterhubHostname = window.location.hostname;
+    useJupytutorReactState.setState({ userId, jupyterhubHostname });
 
     // Gather context when a notebook is opened or becomes active
     notebookTracker.currentChanged.connect(attachNotebook);
