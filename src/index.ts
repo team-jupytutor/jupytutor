@@ -181,10 +181,18 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const cellIndex = [...notebookModel.cells].findIndex(
           c => c === cell.model
         );
+        const jupytutorCellMetadata = cell.model.getMetadata('jupytutor');
+        const cellMetadataConfig =
+          jupytutorCellMetadata !== null &&
+          typeof jupytutorCellMetadata === 'object' &&
+          !Array.isArray(jupytutorCellMetadata)
+            ? (jupytutorCellMetadata as Record<string, unknown>)['cellConfig']
+            : undefined;
         const cellConfig = applyConfigRules(
           notebookModel,
           cellIndex,
-          notebookConfig.rules
+          notebookConfig.rules,
+          cellMetadataConfig
         );
         devLog(() => ({ cellConfig }));
 
