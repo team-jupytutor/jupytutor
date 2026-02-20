@@ -1,7 +1,6 @@
 import z from 'zod';
 import { PredicateSchema } from './predicate';
 
-// TODO: permit these to be in cell metadata as well
 export const RuleConfigOverrideSchema = z.object({
   chatEnabled: z
     .boolean()
