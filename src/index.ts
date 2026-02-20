@@ -17,9 +17,14 @@ import NotebookContextRetrieval, {
 } from './helpers/context/notebookContextRetrieval';
 import parseNB from './helpers/parseNB';
 import { ConfigSchema, PluginConfig } from './schemas/config';
+import z from 'zod';
 import { useJupytutorReactState } from './store';
 import { devLog } from './helpers/devLog';
 import { patchKeyCommand750 } from './helpers/patch-keycommand-7.5.0';
+
+const JupytutorCellMetadataSchema = z.object({
+  cellConfig: z.unknown().optional()
+});
 
 // const assertNever = (x: never) => {
 //   throw new Error(`Unexpected value: ${x}`);
@@ -181,10 +186,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const cellIndex = [...notebookModel.cells].findIndex(
           c => c === cell.model
         );
+        const cellMetadataConfig = JupytutorCellMetadataSchema
+          .safeParse(cell.model.getMetadata('jupytutor')).data?.cellConfig;
         const cellConfig = applyConfigRules(
           notebookModel,
           cellIndex,
-          notebookConfig.rules
+          notebookConfig.rules,
+          cellMetadataConfig
         );
         devLog(() => ({ cellConfig }));
 
