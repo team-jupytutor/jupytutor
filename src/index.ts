@@ -49,7 +49,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
     if (
       !(
         window.location.host === 'data8.datahub.berkeley.edu' ||
+        window.location.host === 'data8-staging.berkeley.edu' ||
         window.location.host === 'prob140.datahub.berkeley.edu' ||
+        window.location.host === 'prob140-staging.berkeley.edu' ||
         window.location.hostname === 'localhost'
       )
     ) {
