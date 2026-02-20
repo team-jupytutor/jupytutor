@@ -377,7 +377,7 @@ const gatherLocalContext = async (
       cell.imageSources.length > 0 || cell.text !== '' || cell.text != null
   );
   const newActiveIndex = filteredCells.findIndex(cell => cell === activeCell);
-  return createChatContextFromCells(
+  return await createChatContextFromCells(
     // TODO: consider using other filtering mechanisms
     filterCells(filteredCells, 'upToGrader', newActiveIndex),
     sendTextbookWithRequest,

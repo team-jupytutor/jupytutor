@@ -7,11 +7,6 @@ import { devLog } from '../devLog';
 //   'The following input is an aggregation of potentially relevant resources to the assignment.\n\n Keep in mind, some are relevant to each particular question, some are not. Each different source is started with its url surrounded by the tokens [LINK] and [/LINK] (e.g. [LINK]https://www.data8.org/[LINK]). Only when completely relevant and necessary, you should attempt to cite these source labels when you use the source contents in your response, formatted as link HTML tags. This should function to encourage student agency and help to not reveal answers directly.';
 // Formatting instructions temporarily pre-pended here for backward compatibility.
 export const STARTING_TEXTBOOK_CONTEXT: string = `
-IMPORTANT - Response Formatting:
-- Use markdown headers (## for h2, ### for h3) for ALL section titles if needed for clarity.
-- Always add blank lines before and after headers
-- Use proper markdown link syntax: [Link Text](URL), NOT <a> or [LINK] tags.
-- Use **bold** or *italic* sparingly and only for emphasis within text (NOT for section headers)
 The following input after this is an aggregation of potentially relevant resources to the assignment.
 Keep in mind, some are relevant to each particular question, some are not. You should attempt to cite sources when you use the source contents in your response, formatted as Markdown links. This should function to encourage student agency and help to not reveal answers directly.
 `;
@@ -46,7 +41,7 @@ const SOFT_TIMEOUT = 5000;
  * Jupyterbook urls are expanded to include the whole subsection. If it's a subsection, the order is [subsection, main, other subsections in order]
  */
 class GlobalNotebookContextRetrieval {
-  private _context: string | null;
+  private _context: Record<string, string> | null;
   private _loadedPromise: Promise<void>;
   private _softTimeoutPromise: Promise<void>;
   private _sourceLinks: string[];
@@ -105,22 +100,21 @@ class GlobalNotebookContextRetrieval {
     if (this._blacklistedURLs.length > 0) {
       this._sourceLinks = this._sourceLinks.filter(url => !isBlacklisted(url));
     }
-    const scrapedTexts = (
-      await Promise.all(
-        this._sourceLinks.map(async url => {
-          return await scrapePageText(url);
-        })
-      )
-    )
-      .filter(text => text !== null)
-      .join('\n\n');
-    this._context = scrapedTexts ? scrapedTexts : '';
-    if (this._context === '') {
+    const scrapedTexts = await Promise.all(
+      this._sourceLinks.map(async url => {
+        return [url, (await scrapePageText(url)) ?? ''] as [string, string];
+      })
+    );
+
+    this._context = Object.fromEntries(scrapedTexts);
+    if (Object.keys(this._context).length === 0) {
       this._context = null;
     }
   }
 
-  async getContext(enforcing: boolean = false): Promise<string | null> {
+  async getContext(
+    enforcing: boolean = false
+  ): Promise<Record<string, string> | null> {
     if (enforcing) {
       await this._loadedPromise;
     } else {
