@@ -1,4 +1,4 @@
-export const DEV_LOG = false;
+export const DEV_LOG = location.href.includes('localhost');
 
 type DevLogFn = (...logArgFunctions: (() => any | Promise<any>)[]) => void;
 type DevLog = DevLogFn & {

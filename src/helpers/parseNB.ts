@@ -8,22 +8,6 @@ import { extractLinksAndImages } from './markdown/extract-links-images';
 
 export type ParsedCellType = 'code' | 'markdown' | 'unknown';
 
-/**
- * For each cell, should get the Type and return any relevant information whether its:
- *  - A written question or hint
- *  - A previous sub-part
- *  - Whether it's a question marker / a previous question starting point
- *  - An image in a cell
- *  - An image in the output of a cell (like a matplotlib graph)
- *  - code:
- *      - question input
- *      - helper code
- *
- * For use in an initial notebook processing script + request making
- *
- * note code output is repeated after input if it's already present (double check this)
- */
-
 export interface ParsedCell {
   type: ParsedCellType | null;
   text: string;
@@ -42,33 +26,16 @@ export interface ParsedCell {
  *
  * @returns allCells, activeIndex, allowed
  */
-const parseNB = (notebook: Notebook): [ParsedCell[], number] => {
-  let activeIndex = notebook.activeCellIndex;
-
+const parseNB = (notebook: Notebook): ParsedCell[] => {
   const cells = notebook.model?.cells ?? [];
 
   const parsedCells: ParsedCell[] = [];
-
   for (const cell of cells) {
+    // not always an array
     parsedCells.push(parseCellModel(cell));
   }
 
-  // cross-reference provided cell to adjust activeIndex, tends to be one ahead when cell is run
-  // but we don't want this to break if someone runs the cell manually / has different settings
-  // if (cell != undefined && activeIndex !== 0) {
-  //   if (
-  //     parsedCells[activeIndex - 1].outputs[0]?.data.toString() ===
-  //     cell.outputArea.layout.widgets[0].node.innerText
-  //   ) {
-  //     activeIndex -= 1;
-  //     console.log(
-  //       '[Jupytutor]: ACTIVE INDEX CORRECTION PERFORMED TO',
-  //       activeIndex
-  //     );
-  //   }
-  // }
-
-  return [parsedCells, activeIndex];
+  return parsedCells;
 };
 
 /**

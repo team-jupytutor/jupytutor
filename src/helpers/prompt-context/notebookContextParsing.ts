@@ -1,7 +1,7 @@
 import { PluginConfig } from '../../schemas/config';
 import { devLog } from '../devLog';
 import type { ParsedCell } from '../parseNB';
-import NotebookContextRetrieval from './notebookContextRetrieval';
+import GlobalNotebookContextRetrieval from './globalNotebookContextRetrieval';
 
 export const parseContextFromNotebook = async (
   notebook: ParsedCell[],
@@ -12,7 +12,6 @@ export const parseContextFromNotebook = async (
     () => notebook
   );
 
-  // TODO plugin config type
   // Extract all unique links from all cells
   const allLinks = new Set<string>();
   notebook.forEach(cell => {
@@ -33,7 +32,7 @@ export const parseContextFromNotebook = async (
   );
 
   // Create ContextRetrieval instance with the gathered links
-  return new NotebookContextRetrieval({
+  return new GlobalNotebookContextRetrieval({
     sourceLinks: uniqueLinks,
     whitelistedURLs: pluginConfig.remoteContextGathering.whitelist, // whitelisted URLs
     blacklistedURLs: pluginConfig.remoteContextGathering.blacklist, // blacklisted URLs

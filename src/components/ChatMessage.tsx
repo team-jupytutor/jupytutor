@@ -84,11 +84,6 @@ export const ChatMessage = (props: ChatHistoryItem) => {
 
   return (
     <div key={props.index} className="chat-message-wrapper">
-      {/* <div
-              className={`chat-sender-label ${isUser ? 'user' : 'assistant'}`}
-          >
-              {isUser ? 'You' : 'JupyTutor'}
-          </div> */}
       {isUser ? (
         <UserMessage message={message} position="right" />
       ) : (

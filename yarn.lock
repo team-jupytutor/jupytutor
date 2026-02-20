@@ -3297,6 +3297,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tanstack/query-core@npm:5.90.20":
+  version: 5.90.20
+  resolution: "@tanstack/query-core@npm:5.90.20"
+  checksum: 47a94b3b8f9d68db6622183cbb2c0e7e79f2e71f4664e3b7b51f24fb77800188d919b5f35f522107518a2bcf7b345948e51b24c86e47c62fbaaa9788a9c61b40
+  languageName: node
+  linkType: hard
+
+"@tanstack/react-query@npm:^5.90.20":
+  version: 5.90.20
+  resolution: "@tanstack/react-query@npm:5.90.20"
+  dependencies:
+    "@tanstack/query-core": 5.90.20
+  peerDependencies:
+    react: ^18 || ^19
+  checksum: 003bc33f0c1c63e64d44d6a7801ab203c835c4f3f1b31ba0d29844c9448ed5ee398f0345fb24d5a2c6560ffda5333cb866cbab0cec33ea7aa61920103727bd84
+  languageName: node
+  linkType: hard
+
 "@tootallnate/once@npm:2":
   version: 2.0.0
   resolution: "@tootallnate/once@npm:2.0.0"
@@ -3872,6 +3890,13 @@ __metadata:
   version: 2.0.7
   resolution: "@types/trusted-types@npm:2.0.7"
   checksum: 8e4202766a65877efcf5d5a41b7dd458480b36195e580a3b1085ad21e948bc417d55d6f8af1fd2a7ad008015d4117d5fdfe432731157da3c68678487174e4ba3
+  languageName: node
+  linkType: hard
+
+"@types/underscore@npm:^1.13.0":
+  version: 1.13.0
+  resolution: "@types/underscore@npm:1.13.0"
+  checksum: 1411cbeb1b743629d504fcb2037b393d11eb207459b9d560f71304183115e30ba145f83b819ffcc8a0d5d4eccfb76bebb0ef7aab8f96a04d88d99ff9dfe503c6
   languageName: node
   linkType: hard
 
@@ -8290,12 +8315,14 @@ __metadata:
     "@jupyterlab/testutils": ^4.0.0
     "@lumino/widgets": ^2.7.1
     "@szhsin/react-menu": ^4.5.1
+    "@tanstack/react-query": ^5.90.20
     "@types/html-to-text": ^9.0.4
     "@types/jest": ^29.2.0
     "@types/json-schema": ^7.0.11
     "@types/react": ^18.2.21
     "@types/react-addons-linked-state-mixin": ^0.14.22
     "@types/react-dom": ^18.2.7
+    "@types/underscore": ^1.13.0
     "@typescript-eslint/eslint-plugin": ^6.1.0
     "@typescript-eslint/parser": ^6.1.0
     browser: ^0.2.6
@@ -8309,8 +8336,8 @@ __metadata:
     jest: ^29.2.0
     npm-run-all2: ^7.0.1
     prettier: ^3.0.0
-    react: ^18.2.0
-    react-dom: ^18.2.0
+    react: 18.2
+    react-dom: 18.2
     react-markdown: ^10.1.0
     remark-parse: ^11.0.0
     rimraf: ^5.0.1
@@ -8323,6 +8350,7 @@ __metadata:
     stylelint-prettier: ^4.0.0
     ts-loader: ^9.5.2
     typescript: ~5.0.2
+    underscore: ^1.13.7
     unified: ^11.0.5
     unist-util-visit: ^5.0.0
     webpack: ^5.100.2
@@ -10138,6 +10166,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-dom@npm:18.2":
+  version: 18.2.0
+  resolution: "react-dom@npm:18.2.0"
+  dependencies:
+    loose-envify: ^1.1.0
+    scheduler: ^0.23.0
+  peerDependencies:
+    react: ^18.2.0
+  checksum: 7d323310bea3a91be2965f9468d552f201b1c27891e45ddc2d6b8f717680c95a75ae0bc1e3f5cf41472446a2589a75aed4483aee8169287909fcd59ad149e8cc
+  languageName: node
+  linkType: hard
+
 "react-dom@npm:^18.2.0":
   version: 18.3.1
   resolution: "react-dom@npm:18.3.1"
@@ -10193,6 +10233,15 @@ __metadata:
     react: ">=16.8.0"
     react-dom: ">=16.8.0"
   checksum: 2b2ec25a51791a2361b41a3a7992988ba21b0f384d1dd81f5c3adf2b7b8350385bd2f2a77fb907ee96d35727f8b13c2a27612210d61dca5f3a62d88ae190f44e
+  languageName: node
+  linkType: hard
+
+"react@npm:18.2":
+  version: 18.2.0
+  resolution: "react@npm:18.2.0"
+  dependencies:
+    loose-envify: ^1.1.0
+  checksum: 88e38092da8839b830cda6feef2e8505dec8ace60579e46aa5490fc3dc9bba0bd50336507dc166f43e3afc1c42939c09fe33b25fae889d6f402721dcd78fca1b
   languageName: node
   linkType: hard
 
@@ -10522,7 +10571,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"scheduler@npm:^0.23.2":
+"scheduler@npm:^0.23.0, scheduler@npm:^0.23.2":
   version: 0.23.2
   resolution: "scheduler@npm:0.23.2"
   dependencies:
@@ -11533,6 +11582,13 @@ __metadata:
   bin:
     uglifyjs: bin/uglifyjs
   checksum: 7ed6272fba562eb6a3149cfd13cda662f115847865c03099e3995a0e7a910eba37b82d4fccf9e88271bb2bcbe505bb374967450f433c17fa27aa36d94a8d0553
+  languageName: node
+  linkType: hard
+
+"underscore@npm:^1.13.7":
+  version: 1.13.7
+  resolution: "underscore@npm:1.13.7"
+  checksum: 174b011af29e4fbe2c70eb2baa8bfab0d0336cf2f5654f364484967bc6264a86224d0134b9176e4235c8cceae00d11839f0fd4824268de04b11c78aca1241684
   languageName: node
   linkType: hard
 

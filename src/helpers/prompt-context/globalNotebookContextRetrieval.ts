@@ -45,7 +45,7 @@ const SOFT_TIMEOUT = 5000;
  *
  * Jupyterbook urls are expanded to include the whole subsection. If it's a subsection, the order is [subsection, main, other subsections in order]
  */
-class NotebookContextRetrieval {
+class GlobalNotebookContextRetrieval {
   private _context: string | null;
   private _loadedPromise: Promise<void>;
   private _softTimeoutPromise: Promise<void>;
@@ -588,4 +588,4 @@ const scrapePageText = async (
   }
 };
 
-export default NotebookContextRetrieval;
+export default GlobalNotebookContextRetrieval;
