@@ -19,7 +19,8 @@ type CellContext = {
 export const applyConfigRules = (
   notebookModel: INotebookModel,
   cellIndex: number,
-  configRules: PluginConfig['rules']
+  configRules: PluginConfig['rules'],
+  cellMetadataConfig: unknown
 ): RuleConfigOverride => {
   const baseConfig = RuleConfigOverrideSchema.parse({});
   const cellContextCache = new Map<number, CellContext>();
@@ -53,6 +54,29 @@ export const applyConfigRules = (
 
     if (!predicate || evaluatePredicate(predicate, getCellContext, cellIndex)) {
       mergedConfig = mergeRuleConfigs(mergedConfig, parsedRuleConfig);
+    }
+  }
+
+  // Apply cell-level metadata overrides last, so they take priority over notebook rules
+  if (
+    cellMetadataConfig !== null &&
+    cellMetadataConfig !== undefined &&
+    typeof cellMetadataConfig === 'object' &&
+    !Array.isArray(cellMetadataConfig)
+  ) {
+    const raw = cellMetadataConfig as Record<string, unknown>;
+    // Validate the raw metadata as a partial RuleConfigOverride
+    const parseResult = RuleConfigOverrideSchema.partial().safeParse(raw);
+    if (parseResult.success) {
+      // Only apply keys explicitly present in the cell metadata so that Zod
+      // defaults for unset fields do not clobber values already established by rules.
+      const explicitOverride: Partial<RuleConfigOverride> = {};
+      for (const key of Object.keys(raw)) {
+        if (key in RuleConfigOverrideSchema.shape) {
+          (explicitOverride as any)[key] = (parseResult.data as any)[key];
+        }
+      }
+      mergedConfig = mergeRuleConfigs(mergedConfig, explicitOverride);
     }
   }
 
