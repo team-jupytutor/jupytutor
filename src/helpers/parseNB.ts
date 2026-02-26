@@ -25,7 +25,7 @@ export interface ParsedCell {
  * @param cell the Jupyter Cell in question
  * @param success whether or not the cell ran successfully without error
  *
- * @returns allCells, activeIndex, allowed
+ * @returns allCells
  */
 const parseNB = (notebook: Notebook): ParsedCell[] => {
   const cells = notebook.model?.cells ?? [];
