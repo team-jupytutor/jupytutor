@@ -4,7 +4,7 @@ import z from 'zod';
 import { PluginConfig, RuleConfigOverrideSchema } from '../schemas/config';
 import { PredicateSchema } from '../schemas/predicate';
 
-type RuleConfigOverride = z.output<typeof RuleConfigOverrideSchema>;
+export type RuleConfigOverride = z.output<typeof RuleConfigOverrideSchema>;
 type Predicate = z.output<typeof PredicateSchema>;
 
 type CellContext = {
@@ -20,7 +20,7 @@ export const applyConfigRules = (
   notebookModel: INotebookModel,
   cellIndex: number,
   configRules: PluginConfig['rules'],
-  cellMetadataConfig?: unknown
+  cellMetadataConfig: unknown
 ): RuleConfigOverride => {
   const baseConfig = RuleConfigOverrideSchema.parse({});
   const cellContextCache = new Map<number, CellContext>();

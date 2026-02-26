@@ -1,11 +1,11 @@
-import NotebookContextRetrieval from '../helpers/context/notebookContextRetrieval.js';
+import GlobalNotebookContextRetrieval from '../helpers/prompt-context/globalNotebookContextRetrieval.js';
 
 const sourceLinks = [
   'https://www.data8.org/fa24/reference/',
   'https://inferentialthinking.com/chapters/13/Estimation.html',
   'https://inferentialthinking.com/chapters/14/2/Variability.html'
 ];
-const contextRetriever = new NotebookContextRetrieval({
+const contextRetriever = new GlobalNotebookContextRetrieval({
   sourceLinks,
   blacklistedURLs: ['https://www.data8.org/fa24/reference/'],
   jupyterbookURL: 'inferentialthinking.com',

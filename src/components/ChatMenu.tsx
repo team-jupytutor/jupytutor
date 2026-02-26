@@ -1,14 +1,18 @@
 import { Menu, MenuButton, MenuItem } from '@szhsin/react-menu';
-import { useNotebookPreferences } from '../store';
 import '@szhsin/react-menu/dist/index.css';
-
-interface ChatMenuProps {
-  setProactiveEnabled: (enabled: boolean) => void;
-}
+import { produce } from 'immer';
+import { PluginConfig } from '../schemas/config';
+import {
+  useChatHistory,
+  useNotebookConfig,
+  useNotebookPreferences
+} from '../store';
 
 // COULD ADD OPTION TO HIDE / MINIMIZE THE CHAT HERE TOO, OR MAKE THIS A SEPARATE BUTTON
 
-export const ChatMenu = (props: ChatMenuProps) => {
+export const ChatMenu = () => {
+  const [, setChatHistory] = useChatHistory();
+  const [notebookConfig, setNotebookConfig] = useNotebookConfig();
   const proactiveEnabled = useNotebookPreferences()?.proactiveEnabled;
 
   return (
@@ -35,7 +39,25 @@ export const ChatMenu = (props: ChatMenuProps) => {
       direction="top"
       portal
     >
-      <MenuItem onClick={() => props.setProactiveEnabled(!proactiveEnabled)}>
+      <MenuItem onClick={() => setChatHistory([])}>Clear this chat</MenuItem>
+      <MenuItem
+        onClick={() =>
+          setNotebookConfig(
+            produce(
+              // TODO maybe have a preferences hook, this is a little awkward
+              notebookConfig ?? ({} as PluginConfig),
+              (draft: PluginConfig) => {
+                if (!draft.preferences) {
+                  draft.preferences = { proactiveEnabled: !proactiveEnabled };
+                  return;
+                }
+                draft.preferences.proactiveEnabled =
+                  !draft.preferences.proactiveEnabled;
+              }
+            )
+          )
+        }
+      >
         {proactiveEnabled
           ? 'Turn off Jupytutor for this notebook'
           : 'Turn on Jupytutor for this notebook'}

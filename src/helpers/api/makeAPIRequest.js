@@ -19,7 +19,7 @@
  * @returns {Promise<Object>} Response data
  */
 
-import config from '../config';
+import config from '../../config';
 
 // Configurable API base URL - can be overridden per request
 const DEFAULT_API_URL = config.api.baseURL;

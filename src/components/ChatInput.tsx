@@ -1,39 +1,47 @@
+import { useCallback, useState } from 'react';
 import '../../style/index.css';
 import { ChatMenu } from './ChatMenu';
 
 interface ChatInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  onSubmit: () => void;
+  onSubmit: (input: string) => void;
   isLoading: boolean;
-  placeholder?: string;
-  setProactiveEnabled: (enabled: boolean) => void;
 }
 
 export const ChatInput = (props: ChatInputProps): JSX.Element => {
-  const { value, onChange, onSubmit, isLoading, placeholder } = props;
+  const { onSubmit, isLoading } = props;
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey && !isLoading) {
-      e.preventDefault();
-      onSubmit();
-    }
-  };
+  const [value, setValue] = useState('');
+
+  const handleSubmit = useCallback(() => {
+    onSubmit(value);
+    setValue('');
+  }, [onSubmit, value]);
+
+  const handleKeyPress = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey && !isLoading) {
+        e.preventDefault();
+        handleSubmit();
+      }
+    },
+    [handleSubmit, isLoading]
+  );
 
   return (
     <div className={`chat-input-container ${isLoading ? 'loading' : ''}`}>
+      <ChatMenu />
       <input
         type="text"
         className={`chat-input ${isLoading ? 'loading' : ''}`}
         value={value}
-        onChange={e => onChange(e.target.value)}
+        onChange={e => setValue(e.target.value)}
         onKeyPress={handleKeyPress}
-        placeholder={placeholder}
+        placeholder="Ask JupyTutor anything..."
         disabled={isLoading}
       />
       <button
         className={`chat-submit-btn ${isLoading ? 'loading' : ''}`}
-        onClick={onSubmit}
+        onClick={handleSubmit}
         disabled={isLoading || !value.trim()}
       >
         {isLoading ? (
@@ -49,9 +57,6 @@ export const ChatInput = (props: ChatInputProps): JSX.Element => {
           </svg>
         )}
       </button>
-      {/* TODO: i kind of wanted this button to the left, but it overlaps with the output-area-enter click. */}
-      {/* should widget go in output area? */}
-      <ChatMenu setProactiveEnabled={props.setProactiveEnabled} />
     </div>
   );
 };
