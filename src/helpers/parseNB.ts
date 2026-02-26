@@ -9,6 +9,7 @@ import { extractLinksAndImages } from './markdown/extract-links-images';
 export type ParsedCellType = 'code' | 'markdown' | 'unknown';
 
 export interface ParsedCell {
+  id: string;
   type: ParsedCellType | null;
   text: string;
   editable: boolean;
@@ -77,6 +78,7 @@ function parseCellModel(cell: ICellModel): ParsedCell {
   }
 
   return {
+    id: cell.id,
     type,
     text,
     editable: cell.getMetadata('editable') ?? true,

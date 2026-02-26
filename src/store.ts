@@ -9,7 +9,7 @@ import { ParsedCell } from './helpers/parseNB';
 import GlobalNotebookContextRetrieval from './helpers/prompt-context/globalNotebookContextRetrieval';
 import { RuleConfigOverride } from './helpers/config-rules';
 
-export type WidgetState = {
+export type JupytutorCellState = {
   // this is something of a cache -- we refetch for a particular cell
   // when it's executed, which is when we consider whether to show for that cell
   cellConfig: RuleConfigOverride | null;
@@ -19,7 +19,7 @@ export type WidgetState = {
   isLoading: boolean;
 };
 
-const DEFAULT_WIDGET_STATE: () => WidgetState = () => ({
+const DEFAULT_WIDGET_STATE: () => JupytutorCellState = () => ({
   cellConfig: null,
 
   chatHistory: [],
@@ -28,7 +28,7 @@ const DEFAULT_WIDGET_STATE: () => WidgetState = () => ({
 });
 
 type NotebookState = {
-  widgetStateByCellId: Record<string, WidgetState>;
+  jupytutorStateByCellId: Record<string, JupytutorCellState>;
   notebookConfig: PluginConfig | null;
   parsedCells: ParsedCell[];
   // TODO: probably get rid of this and replace with memoized functions / hooks
@@ -72,7 +72,7 @@ export const ensureDraftHasNotebook = (
 ) => {
   if (!draft.notebookStateByPath[notebookPath]) {
     draft.notebookStateByPath[notebookPath] = {
-      widgetStateByCellId: {},
+      jupytutorStateByCellId: {},
       notebookConfig: null,
       parsedCells: [],
       globalNotebookContextRetriever: null
@@ -87,8 +87,8 @@ const ensureDraftHasNotebookCell = (
 ) => {
   ensureDraftHasNotebook(draft, notebookPath);
 
-  if (!draft.notebookStateByPath[notebookPath].widgetStateByCellId[cellId]) {
-    draft.notebookStateByPath[notebookPath].widgetStateByCellId[cellId] =
+  if (!draft.notebookStateByPath[notebookPath].jupytutorStateByCellId[cellId]) {
+    draft.notebookStateByPath[notebookPath].jupytutorStateByCellId[cellId] =
       DEFAULT_WIDGET_STATE();
   }
 };
@@ -99,7 +99,7 @@ const cellData = (
   cellId: string
 ) => {
   ensureDraftHasNotebookCell(draft, notebookPath, cellId);
-  return draft.notebookStateByPath[notebookPath].widgetStateByCellId[cellId];
+  return draft.notebookStateByPath[notebookPath].jupytutorStateByCellId[cellId];
 };
 
 export const useJupytutorReactState = create<JupytutorReactState>()(
@@ -210,7 +210,7 @@ export const useWidgetState = () => {
   return (
     useJupytutorReactState(
       state =>
-        state.notebookStateByPath[notebookPath]?.widgetStateByCellId[cellId]
+        state.notebookStateByPath[notebookPath]?.jupytutorStateByCellId[cellId]
     ) ?? DEFAULT_WIDGET_STATE()
   );
 };
@@ -278,7 +278,7 @@ export const useCellConfig = () => {
   const cellId = useCellId();
   const cellState = useJupytutorReactState(
     state =>
-      state.notebookStateByPath[notebookPath]?.widgetStateByCellId[cellId]
+      state.notebookStateByPath[notebookPath]?.jupytutorStateByCellId[cellId]
   );
   return cellState.cellConfig;
 };

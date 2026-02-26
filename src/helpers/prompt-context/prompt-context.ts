@@ -1,3 +1,4 @@
+import { useJupytutorReactState } from '../../store';
 import { ParsedCell } from '../parseNB';
 import GlobalNotebookContextRetrieval from './globalNotebookContextRetrieval';
 
@@ -57,6 +58,8 @@ type PromptContextCodeCell = PromptContextCellBase & {
 
 type PromptContextCell = PromptContextMarkdownCell | PromptContextCodeCell;
 
+// I'm putting this in the client because it's describing the implementation of how this information is gathered,
+//   but I could see it going on the server, too (since it's largely structural)
 export const filteredCellsDescription = `
   Here, we include all cells in the notebook **up to and including** the cell that the user is currently working on. Note that there may be additional cells in the notebook, and the user may have worked on these cells even if they are later in the notebook.
 
@@ -69,12 +72,75 @@ export const filteredCellsDescription = `
 
 // TODO: in the future, we may do this trimming / reflowing on the server when we build the prompt, rather than on the client
 
-export const buildTrimmedPromptContextForCell = (cell: ParsedCell): PromptContextCell | null => {
+export const buildBasePromptContextForCell = (
+  cell: ParsedCell,
+  isActive: boolean
+): PromptContextCell | null => {
   if (cell.type === 'unknown') return null;
-  if (cell.type === 'markdown')
+  if (cell.type === 'markdown') {
+    return {
+      type: 'markdown',
+      history: [
+        {
+          timestamp: Date.now(),
+          type: 'content updated',
+          content: [
+            {
+              type: 'input_text',
+              content: cell.text
+            }
+          ]
+        }
+      ],
+      ...(isActive ? { activeCell: true } : {})
+    };
+  }
+
+  if (cell.type === 'code') {
+    return {
+      type: 'code',
+      history: [
+        {
+          timestamp: Date.now(),
+          type: 'content updated',
+          content: [
+            {
+              type: 'input_text',
+              content: cell.text
+            }
+          ]
+        }
+      ],
+      ...(isActive ? { activeCell: true } : {})
+    };
+  }
+
+  return null;
 };
 
-export const buildFullActivePromptContextForCell = () => {};
+const buildTrimmedPromptContextForCell = (
+  notebookPath: string,
+  cell: ParsedCell,
+  isActive: boolean
+): PromptContextCell | null => {
+  const baseContext = buildBasePromptContextForCell(cell, isActive);
+  return baseContext;
+};
+
+export const buildFullActivePromptContextForCell = (
+  notebookPath: string,
+  cell: ParsedCell
+) => {
+  const baseContext = buildBasePromptContextForCell(cell, true);
+
+  if (!baseContext) return null;
+
+  baseContext.instructorNote =
+    useJupytutorReactState.getState().notebookStateByPath[notebookPath]
+      ?.jupytutorStateByCellId[cell.id]?.cellConfig?.instructorNote ?? '';
+
+  return baseContext;
+};
 
 export type PromptContext = {
   resources: {
@@ -87,7 +153,7 @@ export type PromptContext = {
       cells: PromptContextCell[];
     };
   };
-  activeCellContext: PromptContextCell;
+  activeCellContext: PromptContextCell | null;
 };
 
 export const formattingNotes = `
@@ -99,22 +165,35 @@ IMPORTANT - Response Formatting:
 `.trim();
 
 export const getPromptContextFromCells = async (
+  notebookPath: string,
   cells: ParsedCell[],
   contextRetriever: GlobalNotebookContextRetrieval | null,
-  instructorNote: string | null
+  activeCellId: string,
 ): Promise<PromptContext> => {
   const globalNotebookContext: Record<string, string> = contextRetriever
     ? ((await contextRetriever.getContext()) ?? {})
     : {};
+  const activeCell = cells.find(c => c.id === activeCellId);
+
   return {
     resources: globalNotebookContext,
     notebook: {
       overview: '',
       filteredCells: {
         _description: filteredCellsDescription,
-        cells: cells.map(buildTrimmedPromptContextForCell).filter((cell): cell is PromptContextCell => cell !== null)
+        cells: cells
+          .map(c =>
+            buildTrimmedPromptContextForCell(
+              notebookPath,
+              c,
+              c.id === activeCellId
+            )
+          )
+          .filter((cell): cell is PromptContextCell => cell !== null)
       }
     },
-    activeCellContext: buildFullActivePromptContextForCell;
+    activeCellContext: activeCell
+      ? buildFullActivePromptContextForCell(notebookPath, activeCell)
+      : null
   };
 };

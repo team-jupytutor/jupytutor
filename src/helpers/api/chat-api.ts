@@ -16,6 +16,7 @@ import { ParsedCell } from '../parseNB';
 import GlobalNotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from '../prompt-context/globalNotebookContextRetrieval';
+import { getPromptContextFromCells } from '../prompt-context/prompt-context';
 
 /**
  * Converts a base64 data URL to a File object
@@ -171,6 +172,12 @@ export const useQueryAPIFunction = (relativeTo: number) => {
       setChatHistory(eagerUpdatedChatHistory);
 
       setIsLoading(true);
+      const promptContext = await getPromptContextFromCells(
+        ntoebookPath,
+        parsedCells,
+        globalNotebookContextRetriever,
+      );
+
       const images = gatherImagesFromCells(parsedCells, relativeTo, 10, 5);
 
       if (images.length > 0) {
