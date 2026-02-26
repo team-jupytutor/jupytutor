@@ -73,7 +73,6 @@ const markdownComponents: Components = {
 export interface ChatHistoryItem {
   role: 'user' | 'assistant' | 'system';
   content: { text: string; type: string }[] | string;
-  noShow?: boolean;
   index?: number;
 }
 

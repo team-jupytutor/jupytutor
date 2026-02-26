@@ -8,11 +8,16 @@ import { PluginConfig } from './schemas/config';
 import { ParsedCell } from './helpers/parseNB';
 import GlobalNotebookContextRetrieval from './helpers/prompt-context/globalNotebookContextRetrieval';
 import { RuleConfigOverride } from './helpers/config-rules';
+import type {
+  MultimodalContent,
+  PromptContextCellHistoryEvent
+} from './helpers/prompt-context/prompt-context';
 
 export type JupytutorCellState = {
   // this is something of a cache -- we refetch for a particular cell
   // when it's executed, which is when we consider whether to show for that cell
   cellConfig: RuleConfigOverride | null;
+  history: PromptContextCellHistoryEvent[];
 
   chatHistory: ChatHistoryItem[];
   liveResult: string | null;
@@ -21,6 +26,7 @@ export type JupytutorCellState = {
 
 const DEFAULT_WIDGET_STATE: () => JupytutorCellState = () => ({
   cellConfig: null,
+  history: [],
 
   chatHistory: [],
   liveResult: null,
@@ -51,6 +57,12 @@ type JupytutorReactState = {
   setIsLoading: (
     notebookPath: string
   ) => (cellId: string) => (isLoading: boolean) => void;
+  appendCellHistoryEvent: (
+    notebookPath: string
+  ) => (cellId: string) => (event: PromptContextCellHistoryEvent) => void;
+  appendCellContentUpdatedHistoryEvent: (
+    notebookPath: string
+  ) => (cellId: string) => (cellText: string) => void;
   setRefreshedCellConfig: (
     notebookPath: string
   ) => (cellId: string) => (cellConfig: RuleConfigOverride) => void;
@@ -136,6 +148,54 @@ export const useJupytutorReactState = create<JupytutorReactState>()(
         set(state => {
           return produce(state, draft => {
             cellData(draft, notebookPath, cellId).isLoading = isLoading;
+          });
+        });
+      },
+
+    appendCellHistoryEvent:
+      (notebookPath: string) =>
+      (cellId: string) =>
+      (event: PromptContextCellHistoryEvent) => {
+        set(state => {
+          return produce(state, draft => {
+            cellData(draft, notebookPath, cellId).history.push(event);
+          });
+        });
+      },
+
+    appendCellContentUpdatedHistoryEvent:
+      (notebookPath: string) =>
+      (cellId: string) =>
+      (cellText: string) => {
+        set(state => {
+          return produce(state, draft => {
+            const widgetState = cellData(draft, notebookPath, cellId);
+            const currentContent: MultimodalContent = [
+              {
+                type: 'input_text',
+                content: cellText
+              }
+            ];
+
+            let lastContentUpdate: MultimodalContent | null = null;
+            for (let i = widgetState.history.length - 1; i >= 0; i--) {
+              const event = widgetState.history[i];
+              if (event.type === 'content updated') {
+                lastContentUpdate = event.content;
+                break;
+              }
+            }
+
+            if (
+              lastContentUpdate === null ||
+              JSON.stringify(lastContentUpdate) !== JSON.stringify(currentContent)
+            ) {
+              widgetState.history.push({
+                timestamp: Date.now(),
+                type: 'content updated',
+                content: currentContent
+              });
+            }
           });
         });
       },

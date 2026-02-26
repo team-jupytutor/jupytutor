@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import z from 'zod';
 import { ChatHistoryItem } from '../../components/ChatMessage';
 import {
@@ -164,10 +164,16 @@ export const useQueryAPIFunction = () => {
   const jupyterhubHostname = useJupytutorReactState(
     state => state.jupyterhubHostname
   );
+  const appendCellHistoryEvent = useJupytutorReactState(
+    state => state.appendCellHistoryEvent
+  );
+  const appendCellHistoryEventForCell = useMemo(
+    () => appendCellHistoryEvent(notebookPath)(cellId),
+    [appendCellHistoryEvent, notebookPath, cellId]
+  );
 
   const queryAPI = useCallback(
     async (chatInput: string) => {
-      // Add user message immediately for responsiveness
       const userMessage: ChatHistoryItem = {
         role: 'user',
         content: chatInput
@@ -317,11 +323,34 @@ export const useQueryAPIFunction = () => {
 
                     const { newChatHistory } = z
                       .object({
-                        newChatHistory: z.array(z.any())
+                        newChatHistory: z.array(z.unknown())
                       })
                       .parse(data.data);
+                    const visibleChatHistory = sanitizeChatHistory(newChatHistory);
 
-                    setChatHistory(newChatHistory);
+                    setChatHistory(visibleChatHistory);
+                    appendCellHistoryEventForCell({
+                      timestamp: Date.now(),
+                      type: 'chat',
+                      sender: 'user',
+                      content: chatInput
+                    });
+                    const finalMessage =
+                      visibleChatHistory[visibleChatHistory.length - 1];
+                    if (
+                      finalMessage?.role === 'assistant' &&
+                      typeof finalMessage.content !== 'undefined'
+                    ) {
+                      const finalText = chatHistoryItemToText(finalMessage);
+                      if (finalText.length > 0) {
+                        appendCellHistoryEventForCell({
+                          timestamp: Date.now(),
+                          type: 'chat',
+                          sender: 'assistant',
+                          content: finalText
+                        });
+                      }
+                    }
                     setLiveResult(null); // Clear live result when message is complete
                     break;
                   }
@@ -353,6 +382,7 @@ export const useQueryAPIFunction = () => {
     [
       queryClient,
       chatHistory,
+      appendCellHistoryEventForCell,
       setChatHistory,
       setLiveResult,
       setIsLoading,
@@ -402,6 +432,37 @@ const gatherImagesFromCells = (
   }
   return images.slice(0, maxImages);
 };
+
+const chatHistoryItemToText = (item: ChatHistoryItem): string => {
+  if (typeof item.content === 'string') {
+    return item.content;
+  }
+
+  return item.content[item.content.length - 1]?.text ?? '';
+};
+
+const isChatHistoryItem = (item: unknown): item is ChatHistoryItem => {
+  if (!item || typeof item !== 'object') return false;
+  const candidate = item as Partial<ChatHistoryItem>;
+
+  if (candidate.role !== 'user' && candidate.role !== 'assistant') {
+    return false;
+  }
+
+  if (typeof candidate.content === 'string') return true;
+  if (!Array.isArray(candidate.content)) return false;
+
+  return candidate.content.every(
+    messagePart =>
+      !!messagePart &&
+      typeof messagePart === 'object' &&
+      typeof messagePart.text === 'string' &&
+      typeof messagePart.type === 'string'
+  );
+};
+
+const sanitizeChatHistory = (items: unknown[]): ChatHistoryItem[] =>
+  items.filter(isChatHistoryItem);
 
 // const filterCells = (
 //   cells: ParsedCell[],

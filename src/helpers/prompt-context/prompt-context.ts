@@ -4,7 +4,7 @@ import GlobalNotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './globalNotebookContextRetrieval';
 
-type MultimodalContentChunk =
+export type MultimodalContentChunk =
   | {
       type: 'input_text';
       content: string;
@@ -14,38 +14,46 @@ type MultimodalContentChunk =
       image_url: string;
     };
 
-type MultimodalContent = MultimodalContentChunk[];
+export type MultimodalContent = MultimodalContentChunk[];
 
 type PromptContextCellBase = {
   type: string;
+  currentContent: MultimodalContent;
   instructorNote?: string;
   activeCell?: true;
 };
 
-type PromptContextContentUpdatedHistoryEvent = {
+export type PromptContextContentUpdatedHistoryEvent = {
   timestamp: number;
   type: 'content updated';
   content: MultimodalContent;
 };
 
-type PromptContextChatHistoryEvent = {
+export type PromptContextChatHistoryEvent = {
   timestamp: number;
   type: 'chat';
   content: string;
 };
 
-type PromptContextMarkdownCellHistory =
-  | PromptContextContentUpdatedHistoryEvent
-  | PromptContextChatHistoryEvent;
+export type PromptContextChatHistorySender = 'assistant' | 'user';
 
-type PromptContextMarkdownCell = PromptContextCellBase & {
+export type PromptContextChatHistoryEventWithSender =
+  PromptContextChatHistoryEvent & {
+    sender: PromptContextChatHistorySender;
+  };
+
+export type PromptContextMarkdownCellHistory =
+  | PromptContextContentUpdatedHistoryEvent
+  | PromptContextChatHistoryEventWithSender;
+
+export type PromptContextMarkdownCell = PromptContextCellBase & {
   type: 'markdown';
   history: PromptContextMarkdownCellHistory[];
 };
 
-type PromptContextCodeCellHistory =
+export type PromptContextCodeCellHistory =
   | PromptContextContentUpdatedHistoryEvent
-  | PromptContextChatHistoryEvent
+  | PromptContextChatHistoryEventWithSender
   | {
       timestamp: number;
       type: 'cell run';
@@ -53,12 +61,18 @@ type PromptContextCodeCellHistory =
       output: MultimodalContent;
     };
 
-type PromptContextCodeCell = PromptContextCellBase & {
+export type PromptContextCodeCell = PromptContextCellBase & {
   type: 'code';
   history: PromptContextCodeCellHistory[];
 };
 
-type PromptContextCell = PromptContextMarkdownCell | PromptContextCodeCell;
+export type PromptContextCellHistoryEvent =
+  | PromptContextMarkdownCellHistory
+  | PromptContextCodeCellHistory;
+
+export type PromptContextCell =
+  | PromptContextMarkdownCell
+  | PromptContextCodeCell;
 
 // I'm putting this in the client because it's describing the implementation of how this information is gathered,
 //   but I could see it going on the server, too (since it's largely structural)
@@ -66,8 +80,12 @@ export const filteredCellsDescription = `
   Here, we include all cells in the notebook **up to and including** the cell that the user is currently working on. Note that there may be additional cells in the notebook, and the user may have worked on these cells even if they are later in the notebook.
 
   Note that we include recent history of each cell. This history extends only to the current browser session, so the initial cell state may not represent the original content of the cell before the user began modifying it.
+  
+  Content update events represent committed edits (code runs and markdown saves), not every keystroke. currentContent always reflects the latest cell text as currently edited, even if it has not yet been committed.
 
   We include code cell execution history so you can trace how the state of the kernel has changed over time; keep in mind that errors may have prevented cells from running all the way through.
+
+  Chat messages are only included for the currently active cell. In every cell context, the current content is surfaced separately as currentContent so it can be distinguished from history snapshots.
 
   Note that one cell will be marked as 'active'; this is the cell that the user is currently working in.
 `.trim();
@@ -75,25 +93,28 @@ export const filteredCellsDescription = `
 // TODO: in the future, we may do this trimming / reflowing on the server when we build the prompt, rather than on the client
 
 export const buildBasePromptContextForCell = (
+  notebookPath: string,
   cell: ParsedCell,
-  isActive: boolean
+  isActive: boolean,
+  includeChatHistory: boolean
 ): PromptContextCell | null => {
   if (cell.type === 'unknown') return null;
+
+  const rawHistory =
+    useJupytutorReactState.getState().notebookStateByPath[notebookPath]
+      ?.jupytutorStateByCellId[cell.id]?.history ?? [];
+  const currentContent = buildCellTextAsMultimodalContent(cell.text);
+  const historyWithoutDuplicateLatestContent =
+    trimTrailingContentUpdatedHistory(rawHistory, currentContent);
+  const cellHistory = includeChatHistory
+    ? historyWithoutDuplicateLatestContent
+    : filterOutChatEvents(historyWithoutDuplicateLatestContent);
+
   if (cell.type === 'markdown') {
     return {
       type: 'markdown',
-      history: [
-        {
-          timestamp: Date.now(),
-          type: 'content updated',
-          content: [
-            {
-              type: 'input_text',
-              content: cell.text
-            }
-          ]
-        }
-      ],
+      currentContent,
+      history: cellHistory.filter(isMarkdownHistoryEvent),
       ...(isActive ? { activeCell: true } : {})
     };
   }
@@ -101,18 +122,8 @@ export const buildBasePromptContextForCell = (
   if (cell.type === 'code') {
     return {
       type: 'code',
-      history: [
-        {
-          timestamp: Date.now(),
-          type: 'content updated',
-          content: [
-            {
-              type: 'input_text',
-              content: cell.text
-            }
-          ]
-        }
-      ],
+      currentContent,
+      history: cellHistory.filter(isCodeHistoryEvent),
       ...(isActive ? { activeCell: true } : {})
     };
   }
@@ -125,7 +136,12 @@ const buildTrimmedPromptContextForCell = (
   cell: ParsedCell,
   isActive: boolean
 ): PromptContextCell | null => {
-  const baseContext = buildBasePromptContextForCell(cell, isActive);
+  const baseContext = buildBasePromptContextForCell(
+    notebookPath,
+    cell,
+    isActive,
+    false
+  );
   return baseContext;
 };
 
@@ -133,7 +149,12 @@ export const buildFullActivePromptContextForCell = (
   notebookPath: string,
   cell: ParsedCell
 ) => {
-  const baseContext = buildBasePromptContextForCell(cell, true);
+  const baseContext = buildBasePromptContextForCell(
+    notebookPath,
+    cell,
+    true,
+    true
+  );
 
   if (!baseContext) return null;
 
@@ -143,6 +164,44 @@ export const buildFullActivePromptContextForCell = (
 
   return baseContext;
 };
+
+const buildCellTextAsMultimodalContent = (text: string): MultimodalContent => [
+  {
+    type: 'input_text',
+    content: text
+  }
+];
+
+const isMarkdownHistoryEvent = (
+  item: PromptContextCellHistoryEvent
+): item is PromptContextMarkdownCellHistory => item.type !== 'cell run';
+
+const isCodeHistoryEvent = (
+  item: PromptContextCellHistoryEvent
+): item is PromptContextCodeCellHistory =>
+  item.type === 'content updated' ||
+  item.type === 'chat' ||
+  item.type === 'cell run';
+
+const trimTrailingContentUpdatedHistory = (
+  history: PromptContextCellHistoryEvent[],
+  currentContent: MultimodalContent
+): PromptContextCellHistoryEvent[] => {
+  const last = history[history.length - 1];
+  if (
+    last?.type === 'content updated' &&
+    JSON.stringify(last.content) === JSON.stringify(currentContent)
+  ) {
+    return history.slice(0, -1);
+  }
+
+  return history;
+};
+
+const filterOutChatEvents = (
+  history: PromptContextCellHistoryEvent[]
+): PromptContextCellHistoryEvent[] =>
+  history.filter(item => item.type !== 'chat');
 
 export type PromptContext = {
   resources: {
@@ -177,6 +236,9 @@ export const getPromptContextFromCells = async (
     ? ((await contextRetriever.getContext()) ?? {})
     : {};
   const activeCell = cells.find(c => c.id === activeCellId);
+  const activeCellIndex = cells.findIndex(c => c.id === activeCellId);
+  const cellsToInclude =
+    activeCellIndex >= 0 ? cells.slice(0, activeCellIndex + 1) : cells;
 
   return {
     resources: {
@@ -188,7 +250,7 @@ export const getPromptContextFromCells = async (
       overview: '',
       filteredCells: {
         _description: filteredCellsDescription,
-        cells: cells
+        cells: cellsToInclude
           .map(c =>
             buildTrimmedPromptContextForCell(
               notebookPath,

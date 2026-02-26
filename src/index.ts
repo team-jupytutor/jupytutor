@@ -2,7 +2,7 @@ import {
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
-import { Cell, ICellModel } from '@jupyterlab/cells';
+import { Cell, CodeCellModel, ICellModel } from '@jupyterlab/cells';
 import {
   INotebookModel,
   INotebookTracker,
@@ -10,10 +10,12 @@ import {
   NotebookActions,
   NotebookPanel
 } from '@jupyterlab/notebook';
+import { IOutputModel } from '@jupyterlab/rendermime';
 import { produce } from 'immer';
 import { isEqual } from 'underscore';
 import z from 'zod';
 import JupytutorWidget from './Jupytutor';
+import type { PromptContextCodeCellHistory } from './helpers/prompt-context/prompt-context';
 import { applyConfigRules } from './helpers/config-rules';
 import { devLog } from './helpers/devLog';
 import parseNB from './helpers/parseNB';
@@ -142,6 +144,52 @@ const refreshNotebookParse = (notebookPath: string, notebook: Notebook) => {
   useJupytutorReactState.getState().setNotebookParsedCells(notebookPath)(
     allCells
   );
+  return allCells;
+};
+
+const extractOutputText = (output: IOutputModel): string => {
+  const outputData = output.toJSON() as Record<string, any>;
+  const data = outputData?.data;
+  const outputType = outputData?.output_type;
+
+  if (outputType === 'error') {
+    return outputData?.traceback?.join('\n') ?? outputData?.evalue ?? '';
+  }
+
+  if (outputType === 'display_data' || outputType === 'execute_result') {
+    const textPlain = (data as Record<string, any>)?.['text/plain'];
+    if (textPlain !== undefined) {
+      return Array.isArray(textPlain)
+        ? textPlain.join('\n')
+        : String(textPlain);
+    }
+  }
+
+  if (outputData?.text !== undefined) {
+    return Array.isArray(outputData.text)
+      ? outputData.text.join('\n')
+      : String(outputData.text);
+  }
+
+  if (data !== undefined && typeof data === 'string') {
+    return data;
+  }
+
+  return JSON.stringify(data ?? outputData);
+};
+
+const cellRunOutputFromModel = (cell: CodeCellModel): string => {
+  const outputParts: string[] = [];
+
+  for (let i = 0; i < cell.outputs.length; i++) {
+    const output = cell.outputs.get(i);
+    if (!output) {
+      continue;
+    }
+    outputParts.push(extractOutputText(output));
+  }
+
+  return outputParts.filter(Boolean).join('\n');
 };
 
 const attachNotebook = async (
@@ -235,8 +283,38 @@ const attachNotebook = async (
       async () => await globalNotebookContextRetriever?.getSourceLinks()
     );
 
+    const handleNotebookContentChanged = () =>
+      refreshNotebookParse(notebookPanel.context.path, notebook);
+    notebookModel.contentChanged.connect(handleNotebookContentChanged);
+
+    const handleNotebookSaveState = (
+      _: unknown,
+      saveState: 'started' | 'failed' | 'completed'
+    ) => {
+      if (saveState !== 'completed') {
+        return;
+      }
+
+      const allCells = refreshNotebookParse(notebookPanel.context.path, notebook);
+      const appendCellContentUpdatedHistoryEvent = useJupytutorReactState
+        .getState()
+        .appendCellContentUpdatedHistoryEvent(notebookPanel.context.path);
+
+      for (const cell of allCells) {
+        if (cell.type !== 'markdown') {
+          continue;
+        }
+        appendCellContentUpdatedHistoryEvent(cell.id)(cell.text);
+      }
+    };
+    notebookPanel.context.saveState.connect(handleNotebookSaveState);
+
     // TODO use this detach
-    return detachMetadata;
+    return () => {
+      detachMetadata();
+      notebookModel.contentChanged.disconnect(handleNotebookContentChanged);
+      notebookPanel.context.saveState.disconnect(handleNotebookSaveState);
+    };
   } catch (error) {
     // TODO finally return detach
     console.error('Error gathering context:', error);
@@ -276,11 +354,27 @@ const plugin: JupyterFrontEndPlugin<void> = {
     useJupytutorReactState.setState({ userId, jupyterhubHostname });
 
     // Gather context when a notebook is opened or becomes active
-    notebookTracker.currentChanged.connect(attachNotebook);
+    let detachCurrentNotebook = () => {};
+
+    const attachNotebookAndTrack = async (
+      notebookPanel: NotebookPanel | null
+    ) => {
+      detachCurrentNotebook();
+      detachCurrentNotebook = () => {};
+
+      const detach = await attachNotebook(notebookTracker, notebookPanel);
+      if (typeof detach === 'function') {
+        detachCurrentNotebook = detach;
+      }
+    };
+
+    notebookTracker.currentChanged.connect((_, notebookPanel) => {
+      void attachNotebookAndTrack(notebookPanel);
+    });
 
     // Also gather context immediately if there's already an active notebook
     if (notebookTracker.currentWidget) {
-      attachNotebook(notebookTracker, notebookTracker.currentWidget);
+      void attachNotebookAndTrack(notebookTracker.currentWidget);
     }
 
     // Listen for the execution of a cell. [1, 3, 6]
@@ -326,6 +420,33 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         const proactiveEnabledForCell =
           cellConfig.chatProactive && proactiveEnabledForSession;
+
+        if (cell.model.type === 'code') {
+          const codeCell = cell.model as CodeCellModel;
+          useJupytutorReactState
+            .getState()
+            .appendCellContentUpdatedHistoryEvent(notebookPath)(cell.model.id)(
+            codeCell.sharedModel.getSource()
+          );
+
+          const runHistoryEvent: PromptContextCodeCellHistory = {
+            timestamp: Date.now(),
+            type: 'cell run',
+            hadError: !success,
+            output: [
+              {
+                type: 'input_text' as const,
+                content: cellRunOutputFromModel(codeCell)
+              }
+            ]
+          };
+
+          useJupytutorReactState
+            .getState()
+            .appendCellHistoryEvent(notebookPath)(cell.model.id)(
+            runHistoryEvent
+          );
+        }
 
         if (cellConfig.chatEnabled && proactiveEnabledForCell) {
           refreshNotebookParse(notebookPath, notebook);
