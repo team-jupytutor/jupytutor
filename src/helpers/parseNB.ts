@@ -9,7 +9,6 @@ import { extractLinksAndImages } from './markdown/extract-links-images';
 export type ParsedCellType = 'code' | 'markdown' | 'unknown';
 
 export interface ParsedCell {
-  id: string;
   type: ParsedCellType | null;
   text: string;
   editable: boolean;
@@ -25,7 +24,7 @@ export interface ParsedCell {
  * @param cell the Jupyter Cell in question
  * @param success whether or not the cell ran successfully without error
  *
- * @returns allCells
+ * @returns allCells, activeIndex, allowed
  */
 const parseNB = (notebook: Notebook): ParsedCell[] => {
   const cells = notebook.model?.cells ?? [];
@@ -78,7 +77,6 @@ function parseCellModel(cell: ICellModel): ParsedCell {
   }
 
   return {
-    id: cell.id,
     type,
     text,
     editable: cell.getMetadata('editable') ?? true,

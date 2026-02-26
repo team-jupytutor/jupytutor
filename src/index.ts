@@ -331,6 +331,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
           const jupytutor = new JupytutorWidget({
             cellId: cell.model.id,
             notebookPath,
+            // TODO: rejig 'active cell' logic
+            activeIndex: notebook.activeCellIndex
           });
 
           // Check if there's already a JupyTutor widget in this cell and remove it

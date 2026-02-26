@@ -2,10 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import z from 'zod';
 import { ChatHistoryItem } from '../../components/ChatMessage';
-import {
-  useCellId,
-  useNotebookPath
-} from '../../context/notebook-cell-context';
+import { useNotebookPath } from '../../context/notebook-cell-context';
 import {
   useCellConfig,
   useChatHistory,
@@ -118,8 +115,7 @@ const getFilenameForImage = (image: string, index: number) => {
   }
 };
 
-export const useQueryAPIFunction = () => {
-  const cellId = useCellId();
+export const useQueryAPIFunction = (relativeTo: number) => {
   const notebookPath = useNotebookPath();
   const parsedCells = useJupytutorReactState(
     state => state.notebookStateByPath[notebookPath]?.parsedCells ?? []
@@ -139,14 +135,14 @@ export const useQueryAPIFunction = () => {
     queryKey: [
       'localContext',
       parsedCells,
-      cellId,
+      relativeTo,
       globalNotebookContextRetriever,
       instructorNote
     ],
     queryFn: async () => {
       const context = await gatherLocalContext(
         parsedCells,
-        cellId,
+        relativeTo,
         sendTextbookWithRequest,
         globalNotebookContextRetriever,
         instructorNote
@@ -175,7 +171,7 @@ export const useQueryAPIFunction = () => {
       setChatHistory(eagerUpdatedChatHistory);
 
       setIsLoading(true);
-      const images = gatherImagesFromCells(parsedCells, cellId, 10, 5);
+      const images = gatherImagesFromCells(parsedCells, relativeTo, 10, 5);
 
       if (images.length > 0) {
         devLog(
@@ -232,25 +228,6 @@ export const useQueryAPIFunction = () => {
               formData.append(file.name, file.file);
             }
           });
-
-        devLog(
-          () => 'Sending API request with FormData:',
-          () => {
-            const entries: Record<string, any> = {};
-            formData.forEach((value, key) => {
-              if (value instanceof File) {
-                entries[key] = {
-                  name: value.name,
-                  type: value.type,
-                  size: value.size
-                };
-              } else {
-                entries[key] = value;
-              }
-            });
-            return entries;
-          }
-        );
 
         const response = await fetch(`${baseURL}interaction/stream`, {
           method: 'POST',
@@ -345,6 +322,7 @@ export const useQueryAPIFunction = () => {
       globalNotebookContextRetriever,
       parsedCells,
       instructorNote,
+      relativeTo,
       sendTextbookWithRequest
     ]
   );
@@ -361,17 +339,12 @@ export const useQueryAPIFunction = () => {
  */
 const gatherImagesFromCells = (
   cells: ParsedCell[],
-  relativeTo: string,
+  relativeTo: number,
   maxGoBack: number,
   maxImages: number = 5
 ) => {
-  const relativeToIndex = cells.findIndex(cell => cell.id === relativeTo);
   const images = [];
-  for (
-    let i = relativeToIndex;
-    i > Math.max(0, relativeToIndex - maxGoBack);
-    i--
-  ) {
+  for (let i = relativeTo; i > Math.max(0, relativeTo - maxGoBack); i--) {
     const cell = cells[i];
     if (cell.imageSources.length > 0 && cell.type === 'code') {
       images.push(...cell.imageSources);
@@ -387,46 +360,44 @@ const gatherImagesFromCells = (
 const filterCells = (
   cells: ParsedCell[],
   scope: 'whole' | 'upToGrader' | 'fiveAround' | 'tenAround' | 'none',
-  relativeToIndex: number
+  relativeTo: number
 ) => {
   switch (scope) {
     case 'whole':
       return cells;
     case 'upToGrader':
-      return cells.slice(0, Math.max(0, relativeToIndex + 1));
+      return cells.slice(0, Math.max(0, relativeTo + 1));
     case 'fiveAround':
       return cells.slice(
-        Math.max(0, relativeToIndex - 5),
-        Math.min(cells.length, relativeToIndex + 5)
+        Math.max(0, relativeTo - 5),
+        Math.min(cells.length, relativeTo + 5)
       );
     case 'tenAround':
       return cells.slice(
-        Math.max(0, relativeToIndex - 10),
-        Math.min(cells.length, relativeToIndex + 10)
+        Math.max(0, relativeTo - 10),
+        Math.min(cells.length, relativeTo + 10)
       );
     case 'none':
-      return [cells[relativeToIndex]];
+      return [cells[relativeTo]];
   }
 };
 
 const gatherLocalContext = async (
   allCells: ParsedCell[],
-  cellId: string,
+  relativeTo: number,
   sendTextbookWithRequest: boolean,
   contextRetriever: GlobalNotebookContextRetrieval | null,
   instructorNote: string | null
 ) => {
-  const activeCell = allCells.find(cell => cell.id === cellId);
+  const activeCell = allCells[relativeTo];
   const filteredCells = allCells.filter(
     cell =>
       cell.imageSources.length > 0 || cell.text !== '' || cell.text != null
   );
-  const cellIndexInFiltered = filteredCells.findIndex(
-    cell => cell === activeCell
-  );
+  const newActiveIndex = filteredCells.findIndex(cell => cell === activeCell);
   return createChatContextFromCells(
     // TODO: consider using other filtering mechanisms
-    filterCells(filteredCells, 'upToGrader', cellIndexInFiltered),
+    filterCells(filteredCells, 'upToGrader', newActiveIndex),
     sendTextbookWithRequest,
     contextRetriever,
     instructorNote

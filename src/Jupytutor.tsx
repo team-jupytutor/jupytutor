@@ -14,18 +14,21 @@ import { useCellConfig, usePatchKeyCommand750, useWidgetState } from './store';
 export interface JupytutorProps {
   cellId: string;
   notebookPath: string;
+  activeIndex: number;
 }
 
 export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   const widgetState = useWidgetState();
   const quickResponses = useCellConfig()?.quickResponses ?? [];
 
+  const { activeIndex } = props;
+
   const patchKeyCommand750 = usePatchKeyCommand750();
   const dataProps = patchKeyCommand750
     ? { 'data-lm-suppress-shortcuts': true }
     : {};
 
-  const queryAPI = useQueryAPIFunction();
+  const queryAPI = useQueryAPIFunction(activeIndex);
 
   const callSuggestion = async (suggestion: string) => {
     if (widgetState.isLoading) return;
@@ -67,7 +70,8 @@ class JupytutorWidget extends ReactWidget {
   constructor(
     props: JupytutorProps = {
       cellId: '',
-      notebookPath: ''
+      notebookPath: '',
+      activeIndex: -1
     }
   ) {
     super();
