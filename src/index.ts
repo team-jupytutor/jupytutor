@@ -27,6 +27,14 @@ const JupytutorCellMetadataSchema = z.object({
   cellConfig: z.unknown().optional()
 });
 
+const JUPYTUTOR_CONTAINER_CLASS = 'jp-jupytutor-container';
+
+const removeJupytutorContainer = (cell: Cell) => {
+  cell.node
+    .querySelectorAll(`.${JUPYTUTOR_CONTAINER_CLASS}`)
+    .forEach(container => container.remove());
+};
+
 /**
  * Helper function to extract the user identifier from DataHub-style URLs
  * @returns The username/identifier from the URL path, or null if not found
@@ -333,16 +341,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
             notebookPath,
           });
 
-          // Check if there's already a JupyTutor widget in this cell and remove it
-          const CLASS_NAME = 'jp-jupytutor-container';
-          const existingContainer = cell.node.querySelector(`.${CLASS_NAME}`);
-          if (existingContainer) {
-            existingContainer.remove();
-          }
+          // Remove any existing JupyTutor widgets before re-rendering
+          removeJupytutorContainer(cell);
 
           // Create a proper container div with React mounting point
           const container = document.createElement('div');
-          container.className = CLASS_NAME;
+          container.className = JUPYTUTOR_CONTAINER_CLASS;
 
           container.appendChild(jupytutor.node);
           cell.node.appendChild(container);
@@ -352,7 +356,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             jupytutor.update();
           });
         } else {
-          console.warn('Unknown cell type; not adding Jupytutor widget.');
+          removeJupytutorContainer(cell);
         }
       }
     );
