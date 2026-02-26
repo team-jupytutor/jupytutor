@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import {
-  AssistantMessage,
-  ChatHistoryItem,
-  ChatMessage
-} from './ChatMessage';
+import { AssistantMessage, ChatHistoryItem, ChatMessage } from './ChatMessage';
 
 import { throttle } from 'underscore';
 
@@ -25,7 +21,7 @@ export function ChatHistory({ chatHistory, liveResult }: ChatHistoryProps) {
     []
   );
 
-  console.log({ chatContainerRef, chatHistory, liveResult });
+  // console.log({ chatContainerRef, chatHistory, liveResult });
 
   useEffect(() => {
     throttledScrollToBottom();

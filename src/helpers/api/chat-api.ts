@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import z from 'zod';
 import { ChatHistoryItem } from '../../components/ChatMessage';
@@ -156,6 +156,9 @@ export const useQueryAPIFunction = (relativeTo: number) => {
   const [, setLiveResult] = useLiveResult();
   const [, setIsLoading] = useIsLoading();
   const userId = useJupytutorReactState(state => state.userId);
+  const jupyterhubHostname = useJupytutorReactState(
+    state => state.jupyterhubHostname
+  );
 
   const queryAPI = useCallback(
     async (chatInput: string) => {
@@ -203,6 +206,19 @@ export const useQueryAPIFunction = (relativeTo: number) => {
         // TODO: pending server update (prompts come from client); for now, this prompt assumes test failed
         formData.append('cellType', 'grader');
         formData.append('userId', userId ?? '');
+        formData.append('jupyterhubHostname', jupyterhubHostname ?? '');
+        formData.append('notebookPath', notebookPath ?? '');
+
+        // Derived convenience fields FOR NOW
+        const courseId = jupyterhubHostname?.split('.')[0] ?? '';
+        const assignmentId = notebookPath
+          ? (notebookPath
+              .split('/')
+              .pop()
+              ?.replace(/\.ipynb$/, '') ?? '')
+          : '';
+        formData.append('courseId', courseId);
+        formData.append('assignmentId', assignmentId);
 
         // Add files
         imageFiles
@@ -299,6 +315,8 @@ export const useQueryAPIFunction = (relativeTo: number) => {
       setLiveResult,
       setIsLoading,
       userId,
+      jupyterhubHostname,
+      notebookPath,
       baseURL,
       sendTextbookWithRequest,
       globalNotebookContextRetriever,

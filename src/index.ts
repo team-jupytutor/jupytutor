@@ -12,6 +12,7 @@ import {
 } from '@jupyterlab/notebook';
 import { produce } from 'immer';
 import { isEqual } from 'underscore';
+import z from 'zod';
 import JupytutorWidget from './Jupytutor';
 import { applyConfigRules } from './helpers/config-rules';
 import { devLog } from './helpers/devLog';
@@ -21,6 +22,10 @@ import { STARTING_TEXTBOOK_CONTEXT } from './helpers/prompt-context/globalNotebo
 import { parseContextFromNotebook } from './helpers/prompt-context/notebookContextParsing';
 import { ConfigSchema, PluginConfig } from './schemas/config';
 import { ensureDraftHasNotebook, useJupytutorReactState } from './store';
+
+const JupytutorCellMetadataSchema = z.object({
+  cellConfig: z.unknown().optional()
+});
 
 /**
  * Helper function to extract the user identifier from DataHub-style URLs
@@ -115,10 +120,14 @@ const refreshCellConfig = (
   notebookConfig: PluginConfig
 ) => {
   const cellIndex = [...notebookModel.cells].findIndex(c => c === cellModel);
+  const cellMetadataConfig = JupytutorCellMetadataSchema.safeParse(
+    cellModel.getMetadata('jupytutor')
+  ).data?.cellConfig;
   const cellConfig = applyConfigRules(
     notebookModel,
     cellIndex,
-    notebookConfig.rules
+    notebookConfig.rules,
+    cellMetadataConfig
   );
   useJupytutorReactState.getState().setRefreshedCellConfig(notebookPath)(
     cellModel.id
@@ -245,7 +254,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
     if (
       !(
         window.location.host === 'data8.datahub.berkeley.edu' ||
+        window.location.host === 'data8-staging.berkeley.edu' ||
         window.location.host === 'prob140.datahub.berkeley.edu' ||
+        window.location.host === 'prob140-staging.berkeley.edu' ||
         window.location.hostname === 'localhost'
       )
     ) {
@@ -257,9 +268,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     patchKeyCommand750(app);
 
-    // Get the DataHub user identifier
+    // Get the DataHub user identifier and JupyterHub hostname
     const userId = getUserIdentifierFromURL();
-    useJupytutorReactState.setState({ userId });
+    const jupyterhubHostname = window.location.hostname;
+    useJupytutorReactState.setState({ userId, jupyterhubHostname });
 
     // Gather context when a notebook is opened or becomes active
     notebookTracker.currentChanged.connect(attachNotebook);
