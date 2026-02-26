@@ -16,9 +16,9 @@ import {
 } from '../../store';
 import { devLog } from '../devLog';
 import { ParsedCell } from '../parseNB';
-import GlobalNotebookContextRetrieval, {
-  STARTING_TEXTBOOK_CONTEXT
-} from '../prompt-context/globalNotebookContextRetrieval';
+// import GlobalNotebookContextRetrieval, {
+//   STARTING_TEXTBOOK_CONTEXT
+// } from '../prompt-context/globalNotebookContextRetrieval';
 import { getPromptContextFromCells } from '../prompt-context/prompt-context';
 
 /**
@@ -136,25 +136,25 @@ export const useQueryAPIFunction = () => {
   );
   const instructorNote = useCellConfig()?.instructorNote ?? null;
 
-  const queryOptions = {
-    queryKey: [
-      'localContext',
-      parsedCells,
-      cellId,
-      globalNotebookContextRetriever,
-      instructorNote
-    ],
-    queryFn: async () => {
-      const context = await gatherLocalContext(
-        parsedCells,
-        cellId,
-        sendTextbookWithRequest,
-        globalNotebookContextRetriever,
-        instructorNote
-      );
-      return context;
-    }
-  };
+  // const queryOptions = {
+  //   queryKey: [
+  //     'localContext',
+  //     parsedCells,
+  //     cellId,
+  //     globalNotebookContextRetriever,
+  //     instructorNote
+  //   ],
+  //   queryFn: async () => {
+  //     const context = await gatherLocalContext(
+  //       parsedCells,
+  //       cellId,
+  //       sendTextbookWithRequest,
+  //       globalNotebookContextRetriever,
+  //       instructorNote
+  //     );
+  //     return context;
+  //   }
+  // };
   const queryClient = useQueryClient();
 
   const [chatHistory, setChatHistory] = useChatHistory();
@@ -184,6 +184,11 @@ export const useQueryAPIFunction = () => {
         cellId
       );
 
+      devLog(
+        () => 'Prompt context for request:',
+        () => promptContext
+      );
+
       const images = gatherImagesFromCells(parsedCells, cellId, 10, 5);
 
       if (images.length > 0) {
@@ -194,9 +199,14 @@ export const useQueryAPIFunction = () => {
       }
 
       try {
-        // PRTODO broken
-        const localContextData =
-          (await queryClient.ensureQueryData(queryOptions)) ?? [];
+        // const localContextData =
+        //   (await queryClient.ensureQueryData(queryOptions)) ?? [];
+        const localContextData: ChatHistoryItem[] = [
+          {
+            role: 'system',
+            content: JSON.stringify(promptContext, null, 2)
+          }
+        ];
         const chatHistoryToSend = [...localContextData, ...chatHistory];
 
         const imageFiles = images.map((image, index) => {
@@ -393,178 +403,178 @@ const gatherImagesFromCells = (
   return images.slice(0, maxImages);
 };
 
-const filterCells = (
-  cells: ParsedCell[],
-  scope: 'whole' | 'upToGrader' | 'fiveAround' | 'tenAround' | 'none',
-  relativeToIndex: number
-) => {
-  switch (scope) {
-    case 'whole':
-      return cells;
-    case 'upToGrader':
-      return cells.slice(0, Math.max(0, relativeToIndex + 1));
-    case 'fiveAround':
-      return cells.slice(
-        Math.max(0, relativeToIndex - 5),
-        Math.min(cells.length, relativeToIndex + 5)
-      );
-    case 'tenAround':
-      return cells.slice(
-        Math.max(0, relativeToIndex - 10),
-        Math.min(cells.length, relativeToIndex + 10)
-      );
-    case 'none':
-      return [cells[relativeToIndex]];
-  }
-};
+// const filterCells = (
+//   cells: ParsedCell[],
+//   scope: 'whole' | 'upToGrader' | 'fiveAround' | 'tenAround' | 'none',
+//   relativeToIndex: number
+// ) => {
+//   switch (scope) {
+//     case 'whole':
+//       return cells;
+//     case 'upToGrader':
+//       return cells.slice(0, Math.max(0, relativeToIndex + 1));
+//     case 'fiveAround':
+//       return cells.slice(
+//         Math.max(0, relativeToIndex - 5),
+//         Math.min(cells.length, relativeToIndex + 5)
+//       );
+//     case 'tenAround':
+//       return cells.slice(
+//         Math.max(0, relativeToIndex - 10),
+//         Math.min(cells.length, relativeToIndex + 10)
+//       );
+//     case 'none':
+//       return [cells[relativeToIndex]];
+//   }
+// };
 
-const gatherLocalContext = async (
-  allCells: ParsedCell[],
-  cellId: string,
-  sendTextbookWithRequest: boolean,
-  contextRetriever: GlobalNotebookContextRetrieval | null,
-  instructorNote: string | null
-) => {
-  const activeCell = allCells.find(cell => cell.id === cellId);
-  const filteredCells = allCells.filter(
-    cell =>
-      cell.imageSources.length > 0 || cell.text !== '' || cell.text != null
-  );
-  const cellIndexInFiltered = filteredCells.findIndex(
-    cell => cell === activeCell
-  );
-  return await createChatContextFromCells(
-    // TODO: consider using other filtering mechanisms
-    filterCells(filteredCells, 'upToGrader', cellIndexInFiltered),
-    sendTextbookWithRequest,
-    contextRetriever,
-    instructorNote
-  );
-};
+// const gatherLocalContext = async (
+//   allCells: ParsedCell[],
+//   cellId: string,
+//   sendTextbookWithRequest: boolean,
+//   contextRetriever: GlobalNotebookContextRetrieval | null,
+//   instructorNote: string | null
+// ) => {
+//   const activeCell = allCells.find(cell => cell.id === cellId);
+//   const filteredCells = allCells.filter(
+//     cell =>
+//       cell.imageSources.length > 0 || cell.text !== '' || cell.text != null
+//   );
+//   const cellIndexInFiltered = filteredCells.findIndex(
+//     cell => cell === activeCell
+//   );
+//   return await createChatContextFromCells(
+//     // TODO: consider using other filtering mechanisms
+//     filterCells(filteredCells, 'upToGrader', cellIndexInFiltered),
+//     sendTextbookWithRequest,
+//     contextRetriever,
+//     instructorNote
+//   );
+// };
 
-const getCodeCellOutputAsLLMContent = (
-  cell: ParsedCell
-): { type: 'input_text'; text: string }[] => {
-  return cell.outputs.map(output => {
-    if ('image/png' in output.data) {
-      return {
-        type: 'input_text',
-        // TODO: include in the chat prompt
-        text: '[Image output]'
-      };
-    }
-    if ('text/html' in output.data) {
-      return {
-        type: 'input_text',
-        text: output.data['text/html']?.toString() ?? ''
-      };
-    }
-    if ('text/plain' in output.data) {
-      return {
-        type: 'input_text',
-        text: output.data['text/plain']?.toString() ?? ''
-      };
-    }
-    // TODO: make sure this is getting trimmed somewhere
-    return { type: 'input_text', text: JSON.stringify(output.data) };
-  });
-};
+// const getCodeCellOutputAsLLMContent = (
+//   cell: ParsedCell
+// ): { type: 'input_text'; text: string }[] => {
+//   return cell.outputs.map(output => {
+//     if ('image/png' in output.data) {
+//       return {
+//         type: 'input_text',
+//         // TODO: include in the chat prompt
+//         text: '[Image output]'
+//       };
+//     }
+//     if ('text/html' in output.data) {
+//       return {
+//         type: 'input_text',
+//         text: output.data['text/html']?.toString() ?? ''
+//       };
+//     }
+//     if ('text/plain' in output.data) {
+//       return {
+//         type: 'input_text',
+//         text: output.data['text/plain']?.toString() ?? ''
+//       };
+//     }
+//     // TODO: make sure this is getting trimmed somewhere
+//     return { type: 'input_text', text: JSON.stringify(output.data) };
+//   });
+// };
 
-const createChatContextFromCells = async (
-  cells: ParsedCell[],
-  sendTextbookWithRequest: boolean,
-  contextRetriever: GlobalNotebookContextRetrieval | null,
-  instructorNote: string | null
-): Promise<ChatHistoryItem[]> => {
-  let textbookContext: ChatHistoryItem[] = [];
-  if (sendTextbookWithRequest && contextRetriever != null) {
-    const context = await contextRetriever.getContext();
+// const createChatContextFromCells = async (
+//   cells: ParsedCell[],
+//   sendTextbookWithRequest: boolean,
+//   contextRetriever: GlobalNotebookContextRetrieval | null,
+//   instructorNote: string | null
+// ): Promise<ChatHistoryItem[]> => {
+//   let textbookContext: ChatHistoryItem[] = [];
+//   if (sendTextbookWithRequest && contextRetriever != null) {
+//     const context = await contextRetriever.getContext();
 
-    textbookContext = [
-      {
-        role: 'system',
-        content: [
-          {
-            text: STARTING_TEXTBOOK_CONTEXT,
-            type: 'input_text'
-          }
-        ],
-        noShow: true
-      },
-      {
-        role: 'system',
-        content: [
-          {
-            text: context || '',
-            type: 'input_text'
-          }
-        ],
-        noShow: true
-      }
-    ];
-    devLog(() => 'Sending textbook with request');
-  } else {
-    devLog(() => 'NOT sending textbook with request');
-  }
+//     textbookContext = [
+//       {
+//         role: 'system',
+//         content: [
+//           {
+//             text: STARTING_TEXTBOOK_CONTEXT,
+//             type: 'input_text'
+//           }
+//         ],
+//         noShow: true
+//       },
+//       {
+//         role: 'system',
+//         content: [
+//           {
+//             text: JSON.stringify(context ?? {}),
+//             type: 'input_text'
+//           }
+//         ],
+//         noShow: true
+//       }
+//     ];
+//     devLog(() => 'Sending textbook with request');
+//   } else {
+//     devLog(() => 'NOT sending textbook with request');
+//   }
 
-  const notebookContext: ChatHistoryItem[] = cells.map(cell => {
-    const output = getCodeCellOutputAsLLMContent(cell);
-    const hasOutput = output.length > 0;
-    if (hasOutput && cell.type === 'code') {
-      return {
-        role: 'system' as const,
-        content: [
-          {
-            text:
-              cell.text + '\nThe above code produced the following output:\n',
-            type: 'input_text'
-          },
-          ...output
-        ],
-        noShow: true
-      };
-    } else if (cell.type === 'markdown') {
-      devLog(() => 'Sending free response prompt with request!');
+//   const notebookContext: ChatHistoryItem[] = cells.map(cell => {
+//     const output = getCodeCellOutputAsLLMContent(cell);
+//     const hasOutput = output.length > 0;
+//     if (hasOutput && cell.type === 'code') {
+//       return {
+//         role: 'system' as const,
+//         content: [
+//           {
+//             text:
+//               cell.text + '\nThe above code produced the following output:\n',
+//             type: 'input_text'
+//           },
+//           ...output
+//         ],
+//         noShow: true
+//       };
+//     } else if (cell.type === 'markdown') {
+//       devLog(() => 'Sending free response prompt with request!');
 
-      return {
-        role: 'system' as const,
-        content: [
-          {
-            text: cell.text,
-            type: 'input_text'
-          }
-        ],
-        noShow: true
-      };
-    }
-    return {
-      role: 'system' as const,
-      content: [
-        {
-          text: cell.text ?? '',
-          type: 'input_text'
-        }
-      ],
-      noShow: true
-    };
-  });
+//       return {
+//         role: 'system' as const,
+//         content: [
+//           {
+//             text: cell.text,
+//             type: 'input_text'
+//           }
+//         ],
+//         noShow: true
+//       };
+//     }
+//     return {
+//       role: 'system' as const,
+//       content: [
+//         {
+//           text: cell.text ?? '',
+//           type: 'input_text'
+//         }
+//       ],
+//       noShow: true
+//     };
+//   });
 
-  return [
-    ...textbookContext,
-    ...notebookContext,
-    ...(instructorNote !== null
-      ? [
-          {
-            role: 'system' as const,
-            content: [
-              {
-                text: instructorNote,
-                type: 'input_text'
-              }
-            ],
-            noShow: true
-          }
-        ]
-      : [])
-  ];
-};
+//   return [
+//     ...textbookContext,
+//     ...notebookContext,
+//     ...(instructorNote !== null
+//       ? [
+//           {
+//             role: 'system' as const,
+//             content: [
+//               {
+//                 text: instructorNote,
+//                 type: 'input_text'
+//               }
+//             ],
+//             noShow: true
+//           }
+//         ]
+//       : [])
+//   ];
+// };

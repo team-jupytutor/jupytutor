@@ -1,6 +1,8 @@
 import { useJupytutorReactState } from '../../store';
 import { ParsedCell } from '../parseNB';
-import GlobalNotebookContextRetrieval from './globalNotebookContextRetrieval';
+import GlobalNotebookContextRetrieval, {
+  STARTING_TEXTBOOK_CONTEXT
+} from './globalNotebookContextRetrieval';
 
 type MultimodalContentChunk =
   | {
@@ -144,6 +146,7 @@ export const buildFullActivePromptContextForCell = (
 
 export type PromptContext = {
   resources: {
+    _description: string;
     [key: string]: string;
   };
   notebook: {
@@ -168,7 +171,7 @@ export const getPromptContextFromCells = async (
   notebookPath: string,
   cells: ParsedCell[],
   contextRetriever: GlobalNotebookContextRetrieval | null,
-  activeCellId: string,
+  activeCellId: string
 ): Promise<PromptContext> => {
   const globalNotebookContext: Record<string, string> = contextRetriever
     ? ((await contextRetriever.getContext()) ?? {})
@@ -176,7 +179,11 @@ export const getPromptContextFromCells = async (
   const activeCell = cells.find(c => c.id === activeCellId);
 
   return {
-    resources: globalNotebookContext,
+    resources: {
+      // TODO probably put this description on the server
+      _description: STARTING_TEXTBOOK_CONTEXT,
+      ...globalNotebookContext
+    },
     notebook: {
       overview: '',
       filteredCells: {

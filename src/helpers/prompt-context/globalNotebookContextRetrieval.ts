@@ -7,9 +7,9 @@ import { devLog } from '../devLog';
 //   'The following input is an aggregation of potentially relevant resources to the assignment.\n\n Keep in mind, some are relevant to each particular question, some are not. Each different source is started with its url surrounded by the tokens [LINK] and [/LINK] (e.g. [LINK]https://www.data8.org/[LINK]). Only when completely relevant and necessary, you should attempt to cite these source labels when you use the source contents in your response, formatted as link HTML tags. This should function to encourage student agency and help to not reveal answers directly.';
 // Formatting instructions temporarily pre-pended here for backward compatibility.
 export const STARTING_TEXTBOOK_CONTEXT: string = `
-The following input after this is an aggregation of potentially relevant resources to the assignment.
-Keep in mind, some are relevant to each particular question, some are not. You should attempt to cite sources when you use the source contents in your response, formatted as Markdown links. This should function to encourage student agency and help to not reveal answers directly.
-`;
+  The following information has been fetched from external sources representing resources that are potentially relevant to the assignment.
+  Keep in mind, some are relevant to each particular question, some are not. You should attempt to cite sources when you use the source contents in your response, formatted as Markdown links. This should function to encourage student agency and help to not reveal answers directly.
+`.trim();
 
 /**
  * Configuration interface for ContextRetrieval constructor

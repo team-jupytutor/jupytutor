@@ -217,7 +217,9 @@ const attachNotebook = async (
     devLog(
       () => 'Textbook Context Snippet:\n',
       async () =>
-        (await globalNotebookContextRetriever?.getContext())?.substring(
+        JSON.stringify(
+          await globalNotebookContextRetriever?.getContext()
+        )?.substring(
           STARTING_TEXTBOOK_CONTEXT.length,
           STARTING_TEXTBOOK_CONTEXT.length + 500
         )
@@ -330,7 +332,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
           const jupytutor = new JupytutorWidget({
             cellId: cell.model.id,
-            notebookPath,
+            notebookPath
           });
 
           // Check if there's already a JupyTutor widget in this cell and remove it
