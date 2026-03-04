@@ -4,6 +4,9 @@ import GlobalNotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './globalNotebookContextRetrieval';
 
+// NOTE: These prompt-context type definitions are duplicated in
+// `jupytutor_server/src/types/prompt-context.js` for server-side validation/parsing.
+// Keep both files in sync when editing this format.
 export type MultimodalContentChunk =
   | {
       type: 'input_text';
@@ -83,7 +86,7 @@ export const filteredCellsDescription = `
   
   Content update events represent committed edits (code runs and markdown saves), not every keystroke. currentContent always reflects the latest cell text as currently edited, even if it has not yet been committed.
 
-  We include code cell execution history so you can trace how the state of the kernel has changed over time; keep in mind that errors may have prevented cells from running all the way through.
+  We include code cell execution history so you can trace how the state of the kernel has changed over time; keep in mind that errors may have prevented cells from running all the way through. Only the final output is visible to the student at the moment.
 
   Chat messages are only included for the currently active cell. In every cell context, the current content is surfaced separately as currentContent so it can be distinguished from history snapshots.
 
@@ -106,9 +109,14 @@ export const buildBasePromptContextForCell = (
   const currentContent = buildCellTextAsMultimodalContent(cell.text);
   const historyWithoutDuplicateLatestContent =
     trimTrailingContentUpdatedHistory(rawHistory, currentContent);
+  const historyWithSingletonInitialContentUpdateTrimmed =
+    trimSingletonContentUpdatedHistoryIfUnchanged(
+      historyWithoutDuplicateLatestContent,
+      currentContent
+    );
   const cellHistory = includeChatHistory
-    ? historyWithoutDuplicateLatestContent
-    : filterOutChatEvents(historyWithoutDuplicateLatestContent);
+    ? historyWithSingletonInitialContentUpdateTrimmed
+    : filterOutChatEvents(historyWithSingletonInitialContentUpdateTrimmed);
 
   if (cell.type === 'markdown') {
     return {
@@ -193,6 +201,34 @@ const trimTrailingContentUpdatedHistory = (
     JSON.stringify(last.content) === JSON.stringify(currentContent)
   ) {
     return history.slice(0, -1);
+  }
+
+  return history;
+};
+
+const trimSingletonContentUpdatedHistoryIfUnchanged = (
+  history: PromptContextCellHistoryEvent[],
+  currentContent: MultimodalContent
+): PromptContextCellHistoryEvent[] => {
+  const contentUpdatedIndices: number[] = [];
+  for (let i = 0; i < history.length; i++) {
+    if (history[i]?.type === 'content updated') {
+      contentUpdatedIndices.push(i);
+    }
+  }
+
+  if (contentUpdatedIndices.length !== 1) {
+    return history;
+  }
+
+  const onlyContentUpdatedIndex = contentUpdatedIndices[0];
+  const onlyContentUpdatedEvent = history[onlyContentUpdatedIndex];
+  if (
+    onlyContentUpdatedEvent?.type === 'content updated' &&
+    JSON.stringify(onlyContentUpdatedEvent.content) ===
+      JSON.stringify(currentContent)
+  ) {
+    return history.filter((_, index) => index !== onlyContentUpdatedIndex);
   }
 
   return history;

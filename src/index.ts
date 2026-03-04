@@ -15,7 +15,10 @@ import { produce } from 'immer';
 import { isEqual } from 'underscore';
 import z from 'zod';
 import JupytutorWidget from './Jupytutor';
-import type { PromptContextCodeCellHistory } from './helpers/prompt-context/prompt-context';
+import type {
+  MultimodalContent,
+  PromptContextCodeCellHistory
+} from './helpers/prompt-context/prompt-context';
 import { applyConfigRules } from './helpers/config-rules';
 import { devLog } from './helpers/devLog';
 import parseNB from './helpers/parseNB';
@@ -165,11 +168,18 @@ const extractOutputText = (output: IOutputModel): string => {
   }
 
   if (outputType === 'display_data' || outputType === 'execute_result') {
-    const textPlain = (data as Record<string, any>)?.['text/plain'];
+    const mimeData = (data as Record<string, any>) ?? {};
+    const textPlain = mimeData['text/plain'];
     if (textPlain !== undefined) {
       return Array.isArray(textPlain)
         ? textPlain.join('\n')
         : String(textPlain);
+    }
+    const imageMimes = Object.keys(mimeData).filter(mime =>
+      mime.startsWith('image/')
+    );
+    if (imageMimes.length > 0) {
+      return `[Image output: ${imageMimes.join(', ')}]`;
     }
   }
 
@@ -186,18 +196,93 @@ const extractOutputText = (output: IOutputModel): string => {
   return JSON.stringify(data ?? outputData);
 };
 
-const cellRunOutputFromModel = (cell: CodeCellModel): string => {
-  const outputParts: string[] = [];
+const normalizeMimePayloadToString = (payload: unknown): string | null => {
+  if (typeof payload === 'string') {
+    return payload;
+  }
+  if (Array.isArray(payload)) {
+    return payload
+      .map(item => (typeof item === 'string' ? item : String(item)))
+      .join('');
+  }
+  return null;
+};
+
+const extractDataUrlsFromHtml = (html: string): string[] => {
+  const matches = html.match(/src=["'](data:image\/[^"']+)["']/gi) ?? [];
+  return matches
+    .map(match => {
+      const captured = match.match(/src=["'](data:image\/[^"']+)["']/i);
+      return captured?.[1] ?? '';
+    })
+    .filter(url => url.length > 0);
+};
+
+const extractOutputImageDataUrls = (output: IOutputModel): string[] => {
+  const outputData = output.toJSON() as Record<string, any>;
+  const data = (outputData?.data as Record<string, unknown> | undefined) ?? {};
+  const imageUrls = new Set<string>();
+
+  const imageMimeTypes = Object.keys(data).filter(mime =>
+    mime.startsWith('image/')
+  );
+  for (const mime of imageMimeTypes) {
+    const rawPayload = normalizeMimePayloadToString(data[mime]);
+    if (!rawPayload || rawPayload.trim().length === 0) {
+      continue;
+    }
+
+    if (rawPayload.startsWith('data:')) {
+      imageUrls.add(rawPayload);
+      continue;
+    }
+
+    if (mime === 'image/svg+xml') {
+      imageUrls.add(`data:${mime};utf8,${encodeURIComponent(rawPayload)}`);
+      continue;
+    }
+
+    const compactBase64 = rawPayload.replace(/\s+/g, '');
+    imageUrls.add(`data:${mime};base64,${compactBase64}`);
+  }
+
+  const htmlPayload = normalizeMimePayloadToString(data['text/html']);
+  if (htmlPayload) {
+    for (const dataUrl of extractDataUrlsFromHtml(htmlPayload)) {
+      imageUrls.add(dataUrl);
+    }
+  }
+
+  return Array.from(imageUrls);
+};
+
+const cellRunOutputFromModel = (cell: CodeCellModel): MultimodalContent => {
+  const outputParts: MultimodalContent = [];
 
   for (let i = 0; i < cell.outputs.length; i++) {
     const output = cell.outputs.get(i);
     if (!output) {
       continue;
     }
-    outputParts.push(extractOutputText(output));
+
+    const outputText = extractOutputText(output).trim();
+    if (outputText.length > 0) {
+      outputParts.push({
+        type: 'input_text',
+        content: outputText
+      });
+    }
+
+    const imageDataUrls = extractOutputImageDataUrls(output);
+    for (const imageDataUrl of imageDataUrls) {
+      outputParts.push({
+        type: 'input_image',
+        image_url: imageDataUrl
+      });
+    }
   }
 
-  return outputParts.filter(Boolean).join('\n');
+  return outputParts;
 };
 
 const attachNotebook = async (
@@ -441,12 +526,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             timestamp: Date.now(),
             type: 'cell run',
             hadError: !success,
-            output: [
-              {
-                type: 'input_text' as const,
-                content: cellRunOutputFromModel(codeCell)
-              }
-            ]
+            output: cellRunOutputFromModel(codeCell)
           };
 
           useJupytutorReactState
