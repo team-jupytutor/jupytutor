@@ -21,7 +21,7 @@ import type {
 } from './helpers/prompt-context/prompt-context';
 import { applyConfigRules } from './helpers/config-rules';
 import { devLog } from './helpers/devLog';
-import parseNB from './helpers/parseNB';
+import parseNB, { parseCellModel } from './helpers/parseNB';
 import { patchKeyCommand750 } from './helpers/patch-keycommand-7.5.0';
 import { STARTING_TEXTBOOK_CONTEXT } from './helpers/prompt-context/globalNotebookContextRetrieval';
 import { parseContextFromNotebook } from './helpers/prompt-context/notebookContextParsing';
@@ -376,9 +376,59 @@ const attachNotebook = async (
       async () => await globalNotebookContextRetriever?.getSourceLinks()
     );
 
-    const handleNotebookContentChanged = () =>
+    const cellContentListenerDisconnects = new Map<string, () => void>();
+
+    const disconnectCellContentListeners = () => {
+      for (const disconnect of cellContentListenerDisconnects.values()) {
+        disconnect();
+      }
+      cellContentListenerDisconnects.clear();
+    };
+
+    const handleSingleCellContentChanged = (cellModel: ICellModel) => {
+      // Guard against noisy content-change signals (e.g., markdown runs) that do
+      // not actually change source text.
+      const parsedCells =
+        useJupytutorReactState.getState().notebookStateByPath[
+          notebookPanel.context.path
+        ]?.parsedCells ?? [];
+      const existingParsedCell = parsedCells.find(c => c.id === cellModel.id);
+      const currentSource = cellModel.sharedModel.getSource();
+      if (existingParsedCell && existingParsedCell.text === currentSource) {
+        return;
+      }
+
+      useJupytutorReactState
+        .getState()
+        .setNotebookParsedCell(notebookPanel.context.path)(
+        parseCellModel(cellModel)
+      );
+    };
+
+    const connectCellContentListeners = () => {
+      disconnectCellContentListeners();
+      for (const cellModel of notebookModel.cells) {
+        const slot: Parameters<typeof cellModel.contentChanged.connect>[0] =
+          () => {
+            handleSingleCellContentChanged(cellModel);
+          };
+        cellModel.contentChanged.connect(slot);
+        cellContentListenerDisconnects.set(cellModel.id, () => {
+          cellModel.contentChanged.disconnect(slot);
+        });
+      }
+    };
+
+    connectCellContentListeners();
+
+    const handleNotebookCellsChanged: Parameters<
+      typeof notebookModel.cells.changed.connect
+    >[0] = () => {
+      // Structural list changes (add/remove/reorder) require a full reparse.
       refreshNotebookParse(notebookPanel.context.path, notebook);
-    notebookModel.contentChanged.connect(handleNotebookContentChanged);
+      connectCellContentListeners();
+    };
+    notebookModel.cells.changed.connect(handleNotebookCellsChanged);
 
     const handleNotebookSaveState = (
       _: unknown,
@@ -405,7 +455,8 @@ const attachNotebook = async (
     // TODO use this detach
     return () => {
       detachMetadata();
-      notebookModel.contentChanged.disconnect(handleNotebookContentChanged);
+      disconnectCellContentListeners();
+      notebookModel.cells.changed.disconnect(handleNotebookCellsChanged);
       notebookPanel.context.saveState.disconnect(handleNotebookSaveState);
     };
   } catch (error) {

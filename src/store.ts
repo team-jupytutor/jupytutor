@@ -73,6 +73,9 @@ type JupytutorReactState = {
   setNotebookParsedCells: (
     notebookPath: string
   ) => (parsedCells: ParsedCell[]) => void;
+  setNotebookParsedCell: (
+    notebookPath: string
+  ) => (parsedCell: ParsedCell) => void;
   setGlobalNotebookContextRetriever: (
     notebookPath: string
   ) => (contextRetriever: GlobalNotebookContextRetrieval | null) => void;
@@ -222,7 +225,25 @@ export const useJupytutorReactState = create<JupytutorReactState>()(
       (notebookPath: string) => (parsedCells: ParsedCell[]) => {
         set(state => {
           return produce(state, draft => {
+            ensureDraftHasNotebook(draft, notebookPath);
             draft.notebookStateByPath[notebookPath].parsedCells = parsedCells;
+          });
+        });
+      },
+    setNotebookParsedCell:
+      (notebookPath: string) => (parsedCell: ParsedCell) => {
+        set(state => {
+          return produce(state, draft => {
+            ensureDraftHasNotebook(draft, notebookPath);
+            const parsedCells = draft.notebookStateByPath[notebookPath].parsedCells;
+            const existingIndex = parsedCells.findIndex(
+              cell => cell.id === parsedCell.id
+            );
+            if (existingIndex >= 0) {
+              parsedCells[existingIndex] = parsedCell;
+            } else {
+              parsedCells.push(parsedCell);
+            }
           });
         });
       },

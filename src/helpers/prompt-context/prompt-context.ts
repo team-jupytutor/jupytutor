@@ -83,7 +83,7 @@ export const filteredCellsDescription = `
   Here, we include all cells in the notebook **up to and including** the cell that the user is currently working on. Note that there may be additional cells in the notebook, and the user may have worked on these cells even if they are later in the notebook.
 
   Note that we include recent history of each cell. This history extends only to the current browser session, so the initial cell state may not represent the original content of the cell before the user began modifying it.
-  
+
   Content update events represent committed edits (code runs and markdown saves), not every keystroke. currentContent always reflects the latest cell text as currently edited, even if it has not yet been committed.
 
   We include code cell execution history so you can trace how the state of the kernel has changed over time; keep in mind that errors may have prevented cells from running all the way through. Only the final output is visible to the student at the moment.
