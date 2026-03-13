@@ -224,6 +224,15 @@ export const useQueryAPIFunction = () => {
         formData.append('courseId', courseId);
         formData.append('assignmentId', assignmentId);
 
+        // Add source URLs to the request (bypassing frontend scraping)
+        const sourceURLs =
+          sendTextbookWithRequest && globalNotebookContextRetriever !== null
+            ? await globalNotebookContextRetriever.getSourceLinks()
+            : [];
+        if (sourceURLs.length > 0) {
+          formData.append('sourceURLs', JSON.stringify(sourceURLs));
+        }
+
         // Add files
         imageFiles
           .filter(file => file.file instanceof File)

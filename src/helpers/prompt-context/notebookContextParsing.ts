@@ -39,6 +39,7 @@ export const parseContextFromNotebook = async (
     jupyterbookURLs: pluginConfig.remoteContextGathering.jupyterbook.urls, // jupyterbook URL
     attemptJupyterbookLinkExpansion:
       pluginConfig.remoteContextGathering.jupyterbook.linkExpansion, // attempt JupyterBook link expansion
+    bypassScraping: true, // Temporary patch: send URLs to server instead of scraping on the frontend
     debug: false // debug mode
   });
 };

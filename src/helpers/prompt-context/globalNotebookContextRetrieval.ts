@@ -25,6 +25,7 @@ export interface ContextRetrievalConfig {
   blacklistedURLs?: string[];
   jupyterbookURLs?: string[];
   attemptJupyterbookLinkExpansion?: boolean;
+  bypassScraping?: boolean;
   debug?: boolean;
 }
 
@@ -52,6 +53,7 @@ class GlobalNotebookContextRetrieval {
   private _sourceLinks: string[];
   private _blacklistedURLs: string[];
   private _whitelistedURLs: string[];
+  private _bypassScraping: boolean;
 
   // TODO: WHITELIST
   constructor({
@@ -64,12 +66,14 @@ class GlobalNotebookContextRetrieval {
     ],
     jupyterbookURLs = [],
     attemptJupyterbookLinkExpansion = false,
+    bypassScraping = false,
     debug = false
   }: ContextRetrievalConfig = {}) {
     this._context = null;
     this._sourceLinks = sourceLinks;
     this._blacklistedURLs = blacklistedURLs;
     this._whitelistedURLs = whitelistedURLs ?? [];
+    this._bypassScraping = bypassScraping;
     this._loadedPromise = (async () => {
       if (!debug) {
         if (attemptJupyterbookLinkExpansion) {
@@ -105,6 +109,11 @@ class GlobalNotebookContextRetrieval {
     if (this._blacklistedURLs.length > 0) {
       this._sourceLinks = this._sourceLinks.filter(url => !isBlacklisted(url));
     }
+
+    if (this._bypassScraping) {
+      return;
+    }
+
     const scrapedTexts = (
       await Promise.all(
         this._sourceLinks.map(async url => {
