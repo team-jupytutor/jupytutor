@@ -1,6 +1,6 @@
 {
     "name": "jupytutor",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "description": "A Jupyter extension for providing students LLM feedback based on autograder results and supplied course context.",
     "keywords": [
         "jupyter",
