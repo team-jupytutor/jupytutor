@@ -16,9 +16,9 @@ import {
 } from '../../store';
 import { devLog } from '../devLog';
 import { ParsedCell } from '../parseNB';
-import GlobalNotebookContextRetrieval, {
-  STARTING_TEXTBOOK_CONTEXT
-} from '../prompt-context/globalNotebookContextRetrieval';
+// import GlobalNotebookContextRetrieval, {
+//   STARTING_TEXTBOOK_CONTEXT
+// } from '../prompt-context/globalNotebookContextRetrieval';
 
 /**
  * Converts a base64 data URL to a File object
@@ -147,8 +147,8 @@ export const useQueryAPIFunction = () => {
       const context = await gatherLocalContext(
         parsedCells,
         cellId,
-        sendTextbookWithRequest,
-        globalNotebookContextRetriever,
+        // sendTextbookWithRequest,
+        // globalNotebookContextRetriever,
         instructorNote
       );
       return context;
@@ -212,6 +212,9 @@ export const useQueryAPIFunction = () => {
         formData.append('userId', userId ?? '');
         formData.append('jupyterhubHostname', jupyterhubHostname ?? '');
         formData.append('notebookPath', notebookPath ?? '');
+        const sourceURLs =
+          (await globalNotebookContextRetriever?.getSourceLinks()) ?? [];
+        formData.append('sourceURLs', JSON.stringify(sourceURLs));
 
         // Derived convenience fields FOR NOW
         const courseId = jupyterhubHostname?.split('.')[0] ?? '';
@@ -251,7 +254,6 @@ export const useQueryAPIFunction = () => {
             return entries;
           }
         );
-
         const response = await fetch(`${baseURL}interaction/stream`, {
           method: 'POST',
           body: formData,
@@ -412,8 +414,8 @@ const filterCells = (
 const gatherLocalContext = async (
   allCells: ParsedCell[],
   cellId: string,
-  sendTextbookWithRequest: boolean,
-  contextRetriever: GlobalNotebookContextRetrieval | null,
+  // sendTextbookWithRequest: boolean,
+  // contextRetriever: GlobalNotebookContextRetrieval | null,
   instructorNote: string | null
 ) => {
   const activeCell = allCells.find(cell => cell.id === cellId);
@@ -427,8 +429,8 @@ const gatherLocalContext = async (
   return createChatContextFromCells(
     // TODO: consider using other filtering mechanisms
     filterCells(filteredCells, 'upToGrader', cellIndexInFiltered),
-    sendTextbookWithRequest,
-    contextRetriever,
+    // sendTextbookWithRequest,
+    // contextRetriever,
     instructorNote
   );
 };
@@ -461,42 +463,43 @@ const getCodeCellOutputAsLLMContent = (
   });
 };
 
+// WE CAN CLEAN THIS UP WHEN WE CHANGE THE API INTERFACE FULLY, NOT REMOVING CODE FOR NOW
 const createChatContextFromCells = async (
   cells: ParsedCell[],
-  sendTextbookWithRequest: boolean,
-  contextRetriever: GlobalNotebookContextRetrieval | null,
+  // sendTextbookWithRequest: boolean,
+  // contextRetriever: GlobalNotebookContextRetrieval | null,
   instructorNote: string | null
 ): Promise<ChatHistoryItem[]> => {
-  let textbookContext: ChatHistoryItem[] = [];
-  if (sendTextbookWithRequest && contextRetriever != null) {
-    const context = await contextRetriever.getContext();
+  // let textbookContext: ChatHistoryItem[] = [];
+  // if (sendTextbookWithRequest && contextRetriever != null) {
+  //   const context = await contextRetriever.getContext();
 
-    textbookContext = [
-      {
-        role: 'system',
-        content: [
-          {
-            text: STARTING_TEXTBOOK_CONTEXT,
-            type: 'input_text'
-          }
-        ],
-        noShow: true
-      },
-      {
-        role: 'system',
-        content: [
-          {
-            text: context || '',
-            type: 'input_text'
-          }
-        ],
-        noShow: true
-      }
-    ];
-    devLog(() => 'Sending textbook with request');
-  } else {
-    devLog(() => 'NOT sending textbook with request');
-  }
+  //   textbookContext = [
+  //     {
+  //       role: 'system',
+  //       content: [
+  //         {
+  //           text: STARTING_TEXTBOOK_CONTEXT,
+  //           type: 'input_text'
+  //         }
+  //       ],
+  //       noShow: true
+  //     },
+  //     {
+  //       role: 'system',
+  //       content: [
+  //         {
+  //           text: context || '',
+  //           type: 'input_text'
+  //         }
+  //       ],
+  //       noShow: true
+  //     }
+  //   ];
+  //   devLog(() => 'Sending textbook with request');
+  // } else {
+  //   devLog(() => 'NOT sending textbook with request');
+  // }
 
   const notebookContext: ChatHistoryItem[] = cells.map(cell => {
     const output = getCodeCellOutputAsLLMContent(cell);
@@ -541,7 +544,7 @@ const createChatContextFromCells = async (
   });
 
   return [
-    ...textbookContext,
+    // ...textbookContext,
     ...notebookContext,
     ...(instructorNote !== null
       ? [

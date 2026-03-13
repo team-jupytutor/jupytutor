@@ -18,7 +18,6 @@ import { applyConfigRules } from './helpers/config-rules';
 import { devLog } from './helpers/devLog';
 import parseNB from './helpers/parseNB';
 import { patchKeyCommand750 } from './helpers/patch-keycommand-7.5.0';
-import { STARTING_TEXTBOOK_CONTEXT } from './helpers/prompt-context/globalNotebookContextRetrieval';
 import { parseContextFromNotebook } from './helpers/prompt-context/notebookContextParsing';
 import { ConfigSchema, PluginConfig } from './schemas/config';
 import { ensureDraftHasNotebook, useJupytutorReactState } from './store';
@@ -215,29 +214,8 @@ const attachNotebook = async (
       globalNotebookContextRetriever
     );
 
-    devLog(() => 'Textbook Context Gathering Completed\n');
-
     devLog(
-      () => 'Starting Textbook Prompt:\n',
-      () => STARTING_TEXTBOOK_CONTEXT
-    );
-
-    devLog(
-      () => 'Textbook Context Snippet:\n',
-      async () =>
-        (await globalNotebookContextRetriever?.getContext())?.substring(
-          STARTING_TEXTBOOK_CONTEXT.length,
-          STARTING_TEXTBOOK_CONTEXT.length + 500
-        )
-    );
-
-    devLog(
-      () => 'Textbook Context Length:\n',
-      async () => (await globalNotebookContextRetriever?.getContext())?.length
-    );
-
-    devLog(
-      () => 'Textbook Source Links:\n',
+      () => 'Identified Source Links:\n',
       async () => await globalNotebookContextRetriever?.getSourceLinks()
     );
 
@@ -338,7 +316,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
           const jupytutor = new JupytutorWidget({
             cellId: cell.model.id,
-            notebookPath,
+            notebookPath
           });
 
           // Remove any existing JupyTutor widgets before re-rendering
