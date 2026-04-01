@@ -23,7 +23,6 @@ import { applyConfigRules } from './helpers/config-rules';
 import { devLog } from './helpers/devLog';
 import parseNB, { parseCellModel } from './helpers/parseNB';
 import { patchKeyCommand750 } from './helpers/patch-keycommand-7.5.0';
-import { STARTING_TEXTBOOK_CONTEXT } from './helpers/prompt-context/globalNotebookContextRetrieval';
 import { parseContextFromNotebook } from './helpers/prompt-context/notebookContextParsing';
 import { ConfigSchema, PluginConfig } from './schemas/config';
 import { ensureDraftHasNotebook, useJupytutorReactState } from './store';
@@ -348,31 +347,8 @@ const attachNotebook = async (
       globalNotebookContextRetriever
     );
 
-    devLog(() => 'Textbook Context Gathering Completed\n');
-
     devLog(
-      () => 'Starting Textbook Prompt:\n',
-      () => STARTING_TEXTBOOK_CONTEXT
-    );
-
-    devLog(
-      () => 'Textbook Context Snippet:\n',
-      async () =>
-        JSON.stringify(
-          await globalNotebookContextRetriever?.getContext()
-        )?.substring(
-          STARTING_TEXTBOOK_CONTEXT.length,
-          STARTING_TEXTBOOK_CONTEXT.length + 500
-        )
-    );
-
-    devLog(
-      () => 'Textbook Context Length:\n',
-      async () => (await globalNotebookContextRetriever?.getContext())?.length
-    );
-
-    devLog(
-      () => 'Textbook Source Links:\n',
+      () => 'Identified Source Links:\n',
       async () => await globalNotebookContextRetriever?.getSourceLinks()
     );
 
@@ -478,9 +454,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
     if (
       !(
         window.location.host === 'data8.datahub.berkeley.edu' ||
-        window.location.host === 'data8-staging.berkeley.edu' ||
+        window.location.host === 'data8-staging.datahub.berkeley.edu' ||
         window.location.host === 'prob140.datahub.berkeley.edu' ||
-        window.location.host === 'prob140-staging.berkeley.edu' ||
+        window.location.host === 'prob140-staging.datahub.berkeley.edu' ||
         window.location.hostname === 'localhost'
       )
     ) {
