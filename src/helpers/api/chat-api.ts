@@ -93,9 +93,7 @@ export const useQueryAPIFunction = () => {
       ];
 
       if (images.length > 0) {
-        devLog(
-          () => `Including ${images.length} image(s) in v2 user message`
-        );
+        devLog(() => `Including ${images.length} image(s) in v2 user message`);
       }
 
       try {
@@ -196,9 +194,8 @@ export const useQueryAPIFunction = () => {
           reader.releaseLock();
         }
 
-        const fallbackAssistantText = getAssistantTextFromFinalResponsePayload(
-          finalResponsePayload
-        );
+        const fallbackAssistantText =
+          getAssistantTextFromFinalResponsePayload(finalResponsePayload);
         const finalAssistantText =
           currentMessage.trim().length > 0
             ? currentMessage.trim()
