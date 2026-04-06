@@ -8,19 +8,25 @@ import { PluginConfig } from './schemas/config';
 import { ParsedCell } from './helpers/parseNB';
 import GlobalNotebookContextRetrieval from './helpers/prompt-context/globalNotebookContextRetrieval';
 import { RuleConfigOverride } from './helpers/config-rules';
+import type {
+  MultimodalContent,
+  PromptContextCellHistoryEvent
+} from './helpers/prompt-context/prompt-context';
 
-export type WidgetState = {
+export type JupytutorCellState = {
   // this is something of a cache -- we refetch for a particular cell
   // when it's executed, which is when we consider whether to show for that cell
   cellConfig: RuleConfigOverride | null;
+  history: PromptContextCellHistoryEvent[];
 
   chatHistory: ChatHistoryItem[];
   liveResult: string | null;
   isLoading: boolean;
 };
 
-const DEFAULT_WIDGET_STATE: () => WidgetState = () => ({
+const DEFAULT_WIDGET_STATE: () => JupytutorCellState = () => ({
   cellConfig: null,
+  history: [],
 
   chatHistory: [],
   liveResult: null,
@@ -28,7 +34,7 @@ const DEFAULT_WIDGET_STATE: () => WidgetState = () => ({
 });
 
 type NotebookState = {
-  widgetStateByCellId: Record<string, WidgetState>;
+  jupytutorStateByCellId: Record<string, JupytutorCellState>;
   notebookConfig: PluginConfig | null;
   parsedCells: ParsedCell[];
   // TODO: probably get rid of this and replace with memoized functions / hooks
@@ -51,6 +57,12 @@ type JupytutorReactState = {
   setIsLoading: (
     notebookPath: string
   ) => (cellId: string) => (isLoading: boolean) => void;
+  appendCellHistoryEvent: (
+    notebookPath: string
+  ) => (cellId: string) => (event: PromptContextCellHistoryEvent) => void;
+  appendCellContentUpdatedHistoryEvent: (
+    notebookPath: string
+  ) => (cellId: string) => (cellText: string) => void;
   setRefreshedCellConfig: (
     notebookPath: string
   ) => (cellId: string) => (cellConfig: RuleConfigOverride) => void;
@@ -61,6 +73,9 @@ type JupytutorReactState = {
   setNotebookParsedCells: (
     notebookPath: string
   ) => (parsedCells: ParsedCell[]) => void;
+  setNotebookParsedCell: (
+    notebookPath: string
+  ) => (parsedCell: ParsedCell) => void;
   setGlobalNotebookContextRetriever: (
     notebookPath: string
   ) => (contextRetriever: GlobalNotebookContextRetrieval | null) => void;
@@ -72,7 +87,7 @@ export const ensureDraftHasNotebook = (
 ) => {
   if (!draft.notebookStateByPath[notebookPath]) {
     draft.notebookStateByPath[notebookPath] = {
-      widgetStateByCellId: {},
+      jupytutorStateByCellId: {},
       notebookConfig: null,
       parsedCells: [],
       globalNotebookContextRetriever: null
@@ -87,8 +102,8 @@ const ensureDraftHasNotebookCell = (
 ) => {
   ensureDraftHasNotebook(draft, notebookPath);
 
-  if (!draft.notebookStateByPath[notebookPath].widgetStateByCellId[cellId]) {
-    draft.notebookStateByPath[notebookPath].widgetStateByCellId[cellId] =
+  if (!draft.notebookStateByPath[notebookPath].jupytutorStateByCellId[cellId]) {
+    draft.notebookStateByPath[notebookPath].jupytutorStateByCellId[cellId] =
       DEFAULT_WIDGET_STATE();
   }
 };
@@ -99,7 +114,7 @@ const cellData = (
   cellId: string
 ) => {
   ensureDraftHasNotebookCell(draft, notebookPath, cellId);
-  return draft.notebookStateByPath[notebookPath].widgetStateByCellId[cellId];
+  return draft.notebookStateByPath[notebookPath].jupytutorStateByCellId[cellId];
 };
 
 export const useJupytutorReactState = create<JupytutorReactState>()(
@@ -140,6 +155,54 @@ export const useJupytutorReactState = create<JupytutorReactState>()(
         });
       },
 
+    appendCellHistoryEvent:
+      (notebookPath: string) =>
+      (cellId: string) =>
+      (event: PromptContextCellHistoryEvent) => {
+        set(state => {
+          return produce(state, draft => {
+            cellData(draft, notebookPath, cellId).history.push(event);
+          });
+        });
+      },
+
+    appendCellContentUpdatedHistoryEvent:
+      (notebookPath: string) =>
+      (cellId: string) =>
+      (cellText: string) => {
+        set(state => {
+          return produce(state, draft => {
+            const widgetState = cellData(draft, notebookPath, cellId);
+            const currentContent: MultimodalContent = [
+              {
+                type: 'input_text',
+                content: cellText
+              }
+            ];
+
+            let lastContentUpdate: MultimodalContent | null = null;
+            for (let i = widgetState.history.length - 1; i >= 0; i--) {
+              const event = widgetState.history[i];
+              if (event.type === 'content updated') {
+                lastContentUpdate = event.content;
+                break;
+              }
+            }
+
+            if (
+              lastContentUpdate === null ||
+              JSON.stringify(lastContentUpdate) !== JSON.stringify(currentContent)
+            ) {
+              widgetState.history.push({
+                timestamp: Date.now(),
+                type: 'content updated',
+                content: currentContent
+              });
+            }
+          });
+        });
+      },
+
     setRefreshedCellConfig:
       (notebookPath: string) =>
       (cellId: string) =>
@@ -162,7 +225,25 @@ export const useJupytutorReactState = create<JupytutorReactState>()(
       (notebookPath: string) => (parsedCells: ParsedCell[]) => {
         set(state => {
           return produce(state, draft => {
+            ensureDraftHasNotebook(draft, notebookPath);
             draft.notebookStateByPath[notebookPath].parsedCells = parsedCells;
+          });
+        });
+      },
+    setNotebookParsedCell:
+      (notebookPath: string) => (parsedCell: ParsedCell) => {
+        set(state => {
+          return produce(state, draft => {
+            ensureDraftHasNotebook(draft, notebookPath);
+            const parsedCells = draft.notebookStateByPath[notebookPath].parsedCells;
+            const existingIndex = parsedCells.findIndex(
+              cell => cell.id === parsedCell.id
+            );
+            if (existingIndex >= 0) {
+              parsedCells[existingIndex] = parsedCell;
+            } else {
+              parsedCells.push(parsedCell);
+            }
           });
         });
       },
@@ -210,7 +291,7 @@ export const useWidgetState = () => {
   return (
     useJupytutorReactState(
       state =>
-        state.notebookStateByPath[notebookPath]?.widgetStateByCellId[cellId]
+        state.notebookStateByPath[notebookPath]?.jupytutorStateByCellId[cellId]
     ) ?? DEFAULT_WIDGET_STATE()
   );
 };
@@ -278,7 +359,7 @@ export const useCellConfig = () => {
   const cellId = useCellId();
   const cellState = useJupytutorReactState(
     state =>
-      state.notebookStateByPath[notebookPath]?.widgetStateByCellId[cellId]
+      state.notebookStateByPath[notebookPath]?.jupytutorStateByCellId[cellId]
   );
   return cellState.cellConfig;
 };

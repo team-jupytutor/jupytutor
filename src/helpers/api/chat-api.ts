@@ -1,13 +1,10 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
-import z from 'zod';
+import { useCallback, useMemo } from 'react';
 import { ChatHistoryItem } from '../../components/ChatMessage';
 import {
   useCellId,
   useNotebookPath
 } from '../../context/notebook-cell-context';
 import {
-  useCellConfig,
   useChatHistory,
   useIsLoading,
   useJupytutorReactState,
@@ -16,107 +13,17 @@ import {
 } from '../../store';
 import { devLog } from '../devLog';
 import { ParsedCell } from '../parseNB';
-// import GlobalNotebookContextRetrieval, {
-//   STARTING_TEXTBOOK_CONTEXT
-// } from '../prompt-context/globalNotebookContextRetrieval';
+import { getPromptContextFromCells } from '../prompt-context/prompt-context';
 
-/**
- * Converts a base64 data URL to a File object
- * @param {string} dataUrl - Base64 data URL (e.g., "data:image/png;base64,iVBORw0KGgo...")
- * @param {string} filename - Name for the file
- * @returns {File} File object
- */
-const dataUrlToFile = (
-  dataUrl: string,
-  filename: string = 'file'
-): File | null => {
-  try {
-    // Validate data URL format
-    if (!dataUrl.startsWith('data:')) {
-      // throw new Error('Invalid data URL: must start with "data:"');
-      devLog.warn(
-        () => 'Invalid data URL: must start with "data:"',
-        () => dataUrl
-      );
-      return null;
+type V2InputChunk =
+  | {
+      type: 'input_text';
+      text: string;
     }
-
-    const [header, base64Data] = dataUrl.split(',');
-    if (!base64Data) {
-      // throw new Error('Invalid data URL: missing base64 data');
-      devLog.warn(
-        () => 'Invalid data URL: missing base64 data',
-        () => dataUrl
-      );
-      return null;
-    }
-
-    const mimeMatch = header.match(/data:([^;]+)/);
-    const mimeType = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
-
-    // Validate MIME type for images
-    if (!mimeType.startsWith('image/')) {
-      devLog.warn(
-        () => `Unexpected MIME type: ${mimeType}, expected image/*`,
-        () => dataUrl
-      );
-      return null;
-    }
-
-    // Convert base64 to binary
-    const byteCharacters = atob(base64Data);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-
-    // Create File object
-    const file = new File([byteArray], filename, { type: mimeType });
-
-    devLog(
-      () =>
-        `Created file: ${filename}, type: ${mimeType}, size: ${file.size} bytes`
-    );
-
-    return file;
-  } catch (error) {
-    devLog.error(
-      () => 'Error converting data URL to File:',
-      () => error
-    );
-    devLog.error(
-      () => 'Data URL preview:',
-      () => dataUrl.substring(0, 100) + '...'
-    );
-    throw new Error(
-      `Invalid data URL format: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-};
-
-const getFilenameForImage = (image: string, index: number) => {
-  try {
-    const [header] = image.split(',');
-    const mimeMatch = header.match(/data:([^;]+)/);
-    if (mimeMatch) {
-      const mimeType = mimeMatch[1];
-      const extension =
-        mimeType === 'image/png'
-          ? 'png'
-          : mimeType === 'image/jpeg'
-            ? 'jpg'
-            : mimeType === 'image/gif'
-              ? 'gif'
-              : 'png';
-      return `image_${index}.${extension}`;
-    }
-    return `image_${index}.png`;
-  } catch (error) {
-    console.warn('Could not extract filename from image:', error);
-    return `image_${index}.png`;
-  }
-};
+  | {
+      type: 'input_image';
+      image_url: string;
+    };
 
 export const useQueryAPIFunction = () => {
   const cellId = useCellId();
@@ -125,36 +32,12 @@ export const useQueryAPIFunction = () => {
     state => state.notebookStateByPath[notebookPath]?.parsedCells ?? []
   );
   const [notebookConfig] = useNotebookConfig();
-  const sendTextbookWithRequest =
-    notebookConfig?.remoteContextGathering.enabled ?? false;
   const baseURL = notebookConfig?.api.baseURL ?? '';
   const globalNotebookContextRetriever = useJupytutorReactState(
     state =>
       state.notebookStateByPath[notebookPath]?.globalNotebookContextRetriever ??
       null
   );
-  const instructorNote = useCellConfig()?.instructorNote ?? null;
-
-  const queryOptions = {
-    queryKey: [
-      'localContext',
-      parsedCells,
-      cellId,
-      globalNotebookContextRetriever,
-      instructorNote
-    ],
-    queryFn: async () => {
-      const context = await gatherLocalContext(
-        parsedCells,
-        cellId,
-        // sendTextbookWithRequest,
-        // globalNotebookContextRetriever,
-        instructorNote
-      );
-      return context;
-    }
-  };
-  const queryClient = useQueryClient();
 
   const [chatHistory, setChatHistory] = useChatHistory();
   const [, setLiveResult] = useLiveResult();
@@ -163,10 +46,16 @@ export const useQueryAPIFunction = () => {
   const jupyterhubHostname = useJupytutorReactState(
     state => state.jupyterhubHostname
   );
+  const appendCellHistoryEvent = useJupytutorReactState(
+    state => state.appendCellHistoryEvent
+  );
+  const appendCellHistoryEventForCell = useMemo(
+    () => appendCellHistoryEvent(notebookPath)(cellId),
+    [appendCellHistoryEvent, notebookPath, cellId]
+  );
 
   const queryAPI = useCallback(
     async (chatInput: string) => {
-      // Add user message immediately for responsiveness
       const userMessage: ChatHistoryItem = {
         role: 'user',
         content: chatInput
@@ -175,46 +64,41 @@ export const useQueryAPIFunction = () => {
       setChatHistory(eagerUpdatedChatHistory);
 
       setIsLoading(true);
+
+      const promptContext = await getPromptContextFromCells(
+        notebookPath,
+        parsedCells,
+        globalNotebookContextRetriever,
+        cellId
+      );
+
+      devLog(
+        () => 'Prompt context for request:',
+        () => promptContext
+      );
+
       const images = gatherImagesFromCells(parsedCells, cellId, 10, 5);
+      const newMessage: V2InputChunk[] = [
+        {
+          type: 'input_text',
+          text: chatInput
+        },
+        ...images.map(
+          image =>
+            ({
+              type: 'input_image',
+              image_url: image
+            }) as V2InputChunk
+        )
+      ];
 
       if (images.length > 0) {
-        devLog(
-          () => 'Image detected.'
-          //images[0].substring(0, 100) + '...'
-        );
+        devLog(() => `Including ${images.length} image(s) in v2 user message`);
       }
 
       try {
-        // PRTODO broken
-        const localContextData =
-          (await queryClient.ensureQueryData(queryOptions)) ?? [];
-        const chatHistoryToSend = [...localContextData, ...chatHistory];
-
-        const imageFiles = images.map((image, index) => {
-          const filename = getFilenameForImage(image, index);
-
-          return {
-            name: filename,
-            file: dataUrlToFile(image, filename)
-          };
-        });
-
         // Use streaming request
         setLiveResult(''); // Clear previous live result
-
-        // Create FormData for streaming request
-        const formData = new FormData();
-        formData.append('chatHistory', JSON.stringify(chatHistoryToSend));
-        formData.append('images', JSON.stringify(images));
-        formData.append('newMessage', chatInput);
-        // TODO: pending server update (prompts come from client); for now, this prompt assumes test failed
-        formData.append('cellType', 'grader');
-        formData.append('userId', userId ?? '');
-        formData.append('jupyterhubHostname', jupyterhubHostname ?? '');
-        formData.append('notebookPath', notebookPath ?? '');
-        const sourceURLs =
-          (await globalNotebookContextRetriever?.getSourceLinks()) ?? [];
-        formData.append('sourceURLs', JSON.stringify(sourceURLs));
 
         // Derived convenience fields FOR NOW
         const courseId = jupyterhubHostname?.split('.')[0] ?? '';
@@ -224,39 +108,34 @@ export const useQueryAPIFunction = () => {
               .pop()
               ?.replace(/\.ipynb$/, '') ?? '')
           : '';
-        formData.append('courseId', courseId);
-        formData.append('assignmentId', assignmentId);
-
-        // Add files
-        imageFiles
-          .filter(file => file.file instanceof File)
-          .forEach(file => {
-            if (file.file) {
-              formData.append(file.name, file.file);
-            }
-          });
+        const requestBody = {
+          promptContext,
+          newMessage,
+          stream: true,
+          userId: userId ?? '',
+          jupyterhubHostname: jupyterhubHostname ?? '',
+          notebookPath: notebookPath ?? '',
+          courseId,
+          assignmentId
+        };
 
         devLog(
-          () => 'Sending API request with FormData:',
+          () => 'Sending v2 API request:',
           () => {
-            const entries: Record<string, any> = {};
-            formData.forEach((value, key) => {
-              if (value instanceof File) {
-                entries[key] = {
-                  name: value.name,
-                  type: value.type,
-                  size: value.size
-                };
-              } else {
-                entries[key] = value;
-              }
-            });
-            return entries;
+            return {
+              endpoint: `${baseURL}interaction/v2/stream`,
+              imageCount: images.length,
+              promptContextKeys: Object.keys(promptContext.resources ?? {})
+            };
           }
         );
-        const response = await fetch(`${baseURL}interaction/stream`, {
+
+        const response = await fetch(`${baseURL}interaction/v2/stream`, {
           method: 'POST',
-          body: formData,
+          body: JSON.stringify(requestBody),
+          headers: {
+            'Content-Type': 'application/json'
+          },
           mode: 'cors',
           credentials: 'include',
           cache: 'no-cache'
@@ -274,6 +153,7 @@ export const useQueryAPIFunction = () => {
         const decoder = new TextDecoder();
         let buffer = '';
         let currentMessage = '';
+        let finalResponsePayload: unknown = null;
 
         try {
           while (true) {
@@ -296,16 +176,7 @@ export const useQueryAPIFunction = () => {
                     currentMessage += data.content;
                     setLiveResult(currentMessage);
                   } else if (data.type === 'final_response') {
-                    // Complete message received - add to chat history
-
-                    const { newChatHistory } = z
-                      .object({
-                        newChatHistory: z.array(z.any())
-                      })
-                      .parse(data.data);
-
-                    setChatHistory(newChatHistory);
-                    setLiveResult(null); // Clear live result when message is complete
+                    finalResponsePayload = data.data;
                     break;
                   }
                 } catch (parseError) {
@@ -322,6 +193,40 @@ export const useQueryAPIFunction = () => {
         } finally {
           reader.releaseLock();
         }
+
+        const fallbackAssistantText =
+          getAssistantTextFromFinalResponsePayload(finalResponsePayload);
+        const finalAssistantText =
+          currentMessage.trim().length > 0
+            ? currentMessage.trim()
+            : fallbackAssistantText;
+        const finalChatHistory: ChatHistoryItem[] =
+          finalAssistantText.length > 0
+            ? [
+                ...eagerUpdatedChatHistory,
+                {
+                  role: 'assistant',
+                  content: finalAssistantText
+                }
+              ]
+            : eagerUpdatedChatHistory;
+
+        setChatHistory(finalChatHistory);
+        appendCellHistoryEventForCell({
+          timestamp: Date.now(),
+          type: 'chat',
+          sender: 'user',
+          content: chatInput
+        });
+        if (finalAssistantText.length > 0) {
+          appendCellHistoryEventForCell({
+            timestamp: Date.now(),
+            type: 'chat',
+            sender: 'assistant',
+            content: finalAssistantText
+          });
+        }
+        setLiveResult(null);
       } catch (error) {
         devLog.error(
           () => 'API request failed:',
@@ -334,8 +239,8 @@ export const useQueryAPIFunction = () => {
       setIsLoading(false);
     },
     [
-      queryClient,
       chatHistory,
+      appendCellHistoryEventForCell,
       setChatHistory,
       setLiveResult,
       setIsLoading,
@@ -343,11 +248,8 @@ export const useQueryAPIFunction = () => {
       jupyterhubHostname,
       notebookPath,
       baseURL,
-      sendTextbookWithRequest,
       globalNotebookContextRetriever,
-      parsedCells,
-      instructorNote,
-      sendTextbookWithRequest
+      parsedCells
     ]
   );
 
@@ -368,7 +270,7 @@ const gatherImagesFromCells = (
   maxImages: number = 5
 ) => {
   const relativeToIndex = cells.findIndex(cell => cell.id === relativeTo);
-  const images = [];
+  const images: string[] = [];
   for (
     let i = relativeToIndex;
     i > Math.max(0, relativeToIndex - maxGoBack);
@@ -386,179 +288,54 @@ const gatherImagesFromCells = (
   return images.slice(0, maxImages);
 };
 
-const filterCells = (
-  cells: ParsedCell[],
-  scope: 'whole' | 'upToGrader' | 'fiveAround' | 'tenAround' | 'none',
-  relativeToIndex: number
-) => {
-  switch (scope) {
-    case 'whole':
-      return cells;
-    case 'upToGrader':
-      return cells.slice(0, Math.max(0, relativeToIndex + 1));
-    case 'fiveAround':
-      return cells.slice(
-        Math.max(0, relativeToIndex - 5),
-        Math.min(cells.length, relativeToIndex + 5)
-      );
-    case 'tenAround':
-      return cells.slice(
-        Math.max(0, relativeToIndex - 10),
-        Math.min(cells.length, relativeToIndex + 10)
-      );
-    case 'none':
-      return [cells[relativeToIndex]];
+const chatHistoryItemToText = (item: ChatHistoryItem): string => {
+  if (typeof item.content === 'string') {
+    return item.content;
   }
+
+  return item.content[item.content.length - 1]?.text ?? '';
 };
 
-const gatherLocalContext = async (
-  allCells: ParsedCell[],
-  cellId: string,
-  // sendTextbookWithRequest: boolean,
-  // contextRetriever: GlobalNotebookContextRetrieval | null,
-  instructorNote: string | null
-) => {
-  const activeCell = allCells.find(cell => cell.id === cellId);
-  const filteredCells = allCells.filter(
-    cell =>
-      cell.imageSources.length > 0 || cell.text !== '' || cell.text != null
-  );
-  const cellIndexInFiltered = filteredCells.findIndex(
-    cell => cell === activeCell
-  );
-  return createChatContextFromCells(
-    // TODO: consider using other filtering mechanisms
-    filterCells(filteredCells, 'upToGrader', cellIndexInFiltered),
-    // sendTextbookWithRequest,
-    // contextRetriever,
-    instructorNote
+const isChatHistoryItem = (item: unknown): item is ChatHistoryItem => {
+  if (!item || typeof item !== 'object') return false;
+  const candidate = item as Partial<ChatHistoryItem>;
+
+  if (candidate.role !== 'user' && candidate.role !== 'assistant') {
+    return false;
+  }
+
+  if (typeof candidate.content === 'string') return true;
+  if (!Array.isArray(candidate.content)) return false;
+
+  return candidate.content.every(
+    messagePart =>
+      !!messagePart &&
+      typeof messagePart === 'object' &&
+      typeof messagePart.text === 'string' &&
+      typeof messagePart.type === 'string'
   );
 };
 
-const getCodeCellOutputAsLLMContent = (
-  cell: ParsedCell
-): { type: 'input_text'; text: string }[] => {
-  return cell.outputs.map(output => {
-    if ('image/png' in output.data) {
-      return {
-        type: 'input_text',
-        // TODO: include in the chat prompt
-        text: '[Image output]'
-      };
+const sanitizeChatHistory = (items: unknown[]): ChatHistoryItem[] =>
+  items.filter(isChatHistoryItem);
+
+const getAssistantTextFromFinalResponsePayload = (payload: unknown): string => {
+  if (!payload || typeof payload !== 'object') {
+    return '';
+  }
+
+  const candidate = payload as { newChatHistory?: unknown };
+  if (!Array.isArray(candidate.newChatHistory)) {
+    return '';
+  }
+
+  const visibleChatHistory = sanitizeChatHistory(candidate.newChatHistory);
+  for (let i = visibleChatHistory.length - 1; i >= 0; i--) {
+    const item = visibleChatHistory[i];
+    if (item.role === 'assistant') {
+      return chatHistoryItemToText(item).trim();
     }
-    if ('text/html' in output.data) {
-      return {
-        type: 'input_text',
-        text: output.data['text/html']?.toString() ?? ''
-      };
-    }
-    if ('text/plain' in output.data) {
-      return {
-        type: 'input_text',
-        text: output.data['text/plain']?.toString() ?? ''
-      };
-    }
-    // TODO: make sure this is getting trimmed somewhere
-    return { type: 'input_text', text: JSON.stringify(output.data) };
-  });
-};
+  }
 
-// WE CAN CLEAN THIS UP WHEN WE CHANGE THE API INTERFACE FULLY, NOT REMOVING CODE FOR NOW
-const createChatContextFromCells = async (
-  cells: ParsedCell[],
-  // sendTextbookWithRequest: boolean,
-  // contextRetriever: GlobalNotebookContextRetrieval | null,
-  instructorNote: string | null
-): Promise<ChatHistoryItem[]> => {
-  // let textbookContext: ChatHistoryItem[] = [];
-  // if (sendTextbookWithRequest && contextRetriever != null) {
-  //   const context = await contextRetriever.getContext();
-
-  //   textbookContext = [
-  //     {
-  //       role: 'system',
-  //       content: [
-  //         {
-  //           text: STARTING_TEXTBOOK_CONTEXT,
-  //           type: 'input_text'
-  //         }
-  //       ],
-  //       noShow: true
-  //     },
-  //     {
-  //       role: 'system',
-  //       content: [
-  //         {
-  //           text: context || '',
-  //           type: 'input_text'
-  //         }
-  //       ],
-  //       noShow: true
-  //     }
-  //   ];
-  //   devLog(() => 'Sending textbook with request');
-  // } else {
-  //   devLog(() => 'NOT sending textbook with request');
-  // }
-
-  const notebookContext: ChatHistoryItem[] = cells.map(cell => {
-    const output = getCodeCellOutputAsLLMContent(cell);
-    const hasOutput = output.length > 0;
-    if (hasOutput && cell.type === 'code') {
-      return {
-        role: 'system' as const,
-        content: [
-          {
-            text:
-              cell.text + '\nThe above code produced the following output:\n',
-            type: 'input_text'
-          },
-          ...output
-        ],
-        noShow: true
-      };
-    } else if (cell.type === 'markdown') {
-      devLog(() => 'Sending free response prompt with request!');
-
-      return {
-        role: 'system' as const,
-        content: [
-          {
-            text: cell.text,
-            type: 'input_text'
-          }
-        ],
-        noShow: true
-      };
-    }
-    return {
-      role: 'system' as const,
-      content: [
-        {
-          text: cell.text ?? '',
-          type: 'input_text'
-        }
-      ],
-      noShow: true
-    };
-  });
-
-  return [
-    // ...textbookContext,
-    ...notebookContext,
-    ...(instructorNote !== null
-      ? [
-          {
-            role: 'system' as const,
-            content: [
-              {
-                text: instructorNote,
-                type: 'input_text'
-              }
-            ],
-            noShow: true
-          }
-        ]
-      : [])
-  ];
+  return '';
 };

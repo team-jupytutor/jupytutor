@@ -29,11 +29,9 @@ export function ChatHistory({ chatHistory, liveResult }: ChatHistoryProps) {
 
   return (
     <div className="chat-container" ref={chatContainerRef}>
-      {chatHistory
-        .filter(item => !item.noShow)
-        .map((item, index) => (
-          <ChatMessage {...item} index={index} />
-        ))}
+      {chatHistory.map((item, index) => (
+        <ChatMessage {...item} index={index} />
+      ))}
       {/* The above handles the ChatHistory. Below handles a new streaming message. */}
       {liveResult && (
         <AssistantMessage message={liveResult} streaming={'streaming'} />

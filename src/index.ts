@@ -2,7 +2,7 @@ import {
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
-import { Cell, ICellModel } from '@jupyterlab/cells';
+import { Cell, CodeCellModel, ICellModel } from '@jupyterlab/cells';
 import {
   INotebookModel,
   INotebookTracker,
@@ -10,13 +10,18 @@ import {
   NotebookActions,
   NotebookPanel
 } from '@jupyterlab/notebook';
+import { IOutputModel } from '@jupyterlab/rendermime';
 import { produce } from 'immer';
 import { isEqual } from 'underscore';
 import z from 'zod';
 import JupytutorWidget from './Jupytutor';
+import type {
+  MultimodalContent,
+  PromptContextCodeCellHistory
+} from './helpers/prompt-context/prompt-context';
 import { applyConfigRules } from './helpers/config-rules';
 import { devLog } from './helpers/devLog';
-import parseNB from './helpers/parseNB';
+import parseNB, { parseCellModel } from './helpers/parseNB';
 import { patchKeyCommand750 } from './helpers/patch-keycommand-7.5.0';
 import { parseContextFromNotebook } from './helpers/prompt-context/notebookContextParsing';
 import { ConfigSchema, PluginConfig } from './schemas/config';
@@ -149,6 +154,134 @@ const refreshNotebookParse = (notebookPath: string, notebook: Notebook) => {
   useJupytutorReactState.getState().setNotebookParsedCells(notebookPath)(
     allCells
   );
+  return allCells;
+};
+
+const extractOutputText = (output: IOutputModel): string => {
+  const outputData = output.toJSON() as Record<string, any>;
+  const data = outputData?.data;
+  const outputType = outputData?.output_type;
+
+  if (outputType === 'error') {
+    return outputData?.traceback?.join('\n') ?? outputData?.evalue ?? '';
+  }
+
+  if (outputType === 'display_data' || outputType === 'execute_result') {
+    const mimeData = (data as Record<string, any>) ?? {};
+    const textPlain = mimeData['text/plain'];
+    if (textPlain !== undefined) {
+      return Array.isArray(textPlain)
+        ? textPlain.join('\n')
+        : String(textPlain);
+    }
+    const imageMimes = Object.keys(mimeData).filter(mime =>
+      mime.startsWith('image/')
+    );
+    if (imageMimes.length > 0) {
+      return `[Image output: ${imageMimes.join(', ')}]`;
+    }
+  }
+
+  if (outputData?.text !== undefined) {
+    return Array.isArray(outputData.text)
+      ? outputData.text.join('\n')
+      : String(outputData.text);
+  }
+
+  if (data !== undefined && typeof data === 'string') {
+    return data;
+  }
+
+  return JSON.stringify(data ?? outputData);
+};
+
+const normalizeMimePayloadToString = (payload: unknown): string | null => {
+  if (typeof payload === 'string') {
+    return payload;
+  }
+  if (Array.isArray(payload)) {
+    return payload
+      .map(item => (typeof item === 'string' ? item : String(item)))
+      .join('');
+  }
+  return null;
+};
+
+const extractDataUrlsFromHtml = (html: string): string[] => {
+  const matches = html.match(/src=["'](data:image\/[^"']+)["']/gi) ?? [];
+  return matches
+    .map(match => {
+      const captured = match.match(/src=["'](data:image\/[^"']+)["']/i);
+      return captured?.[1] ?? '';
+    })
+    .filter(url => url.length > 0);
+};
+
+const extractOutputImageDataUrls = (output: IOutputModel): string[] => {
+  const outputData = output.toJSON() as Record<string, any>;
+  const data = (outputData?.data as Record<string, unknown> | undefined) ?? {};
+  const imageUrls = new Set<string>();
+
+  const imageMimeTypes = Object.keys(data).filter(mime =>
+    mime.startsWith('image/')
+  );
+  for (const mime of imageMimeTypes) {
+    const rawPayload = normalizeMimePayloadToString(data[mime]);
+    if (!rawPayload || rawPayload.trim().length === 0) {
+      continue;
+    }
+
+    if (rawPayload.startsWith('data:')) {
+      imageUrls.add(rawPayload);
+      continue;
+    }
+
+    if (mime === 'image/svg+xml') {
+      imageUrls.add(`data:${mime};utf8,${encodeURIComponent(rawPayload)}`);
+      continue;
+    }
+
+    const compactBase64 = rawPayload.replace(/\s+/g, '');
+    imageUrls.add(`data:${mime};base64,${compactBase64}`);
+  }
+
+  const htmlPayload = normalizeMimePayloadToString(data['text/html']);
+  if (htmlPayload) {
+    for (const dataUrl of extractDataUrlsFromHtml(htmlPayload)) {
+      imageUrls.add(dataUrl);
+    }
+  }
+
+  return Array.from(imageUrls);
+};
+
+const cellRunOutputFromModel = (cell: CodeCellModel): MultimodalContent => {
+  const outputParts: MultimodalContent = [];
+
+  for (let i = 0; i < cell.outputs.length; i++) {
+    const output = cell.outputs.get(i);
+    if (!output) {
+      continue;
+    }
+
+    const outputText = extractOutputText(output).trim();
+    if (outputText.length > 0) {
+      outputParts.push({
+        type: 'input_text',
+        content: outputText
+      });
+    }
+
+    const imageDataUrls = extractOutputImageDataUrls(output);
+    for (const imageDataUrl of imageDataUrls) {
+      outputParts.push({
+        type: 'input_image',
+        image_url: imageDataUrl
+      });
+    }
+  }
+
+  return outputParts;
 };
 
 const attachNotebook = async (
@@ -219,8 +352,89 @@ const attachNotebook = async (
       async () => await globalNotebookContextRetriever?.getSourceLinks()
     );
 
+    const cellContentListenerDisconnects = new Map<string, () => void>();
+
+    const disconnectCellContentListeners = () => {
+      for (const disconnect of cellContentListenerDisconnects.values()) {
+        disconnect();
+      }
+      cellContentListenerDisconnects.clear();
+    };
+
+    const handleSingleCellContentChanged = (cellModel: ICellModel) => {
+      // Guard against noisy content-change signals (e.g., markdown runs) that do
+      // not actually change source text.
+      const parsedCells =
+        useJupytutorReactState.getState().notebookStateByPath[
+          notebookPanel.context.path
+        ]?.parsedCells ?? [];
+      const existingParsedCell = parsedCells.find(c => c.id === cellModel.id);
+      const currentSource = cellModel.sharedModel.getSource();
+      if (existingParsedCell && existingParsedCell.text === currentSource) {
+        return;
+      }
+
+      useJupytutorReactState
+        .getState()
+        .setNotebookParsedCell(notebookPanel.context.path)(
+        parseCellModel(cellModel)
+      );
+    };
+
+    const connectCellContentListeners = () => {
+      disconnectCellContentListeners();
+      for (const cellModel of notebookModel.cells) {
+        const slot: Parameters<typeof cellModel.contentChanged.connect>[0] =
+          () => {
+            handleSingleCellContentChanged(cellModel);
+          };
+        cellModel.contentChanged.connect(slot);
+        cellContentListenerDisconnects.set(cellModel.id, () => {
+          cellModel.contentChanged.disconnect(slot);
+        });
+      }
+    };
+
+    connectCellContentListeners();
+
+    const handleNotebookCellsChanged: Parameters<
+      typeof notebookModel.cells.changed.connect
+    >[0] = () => {
+      // Structural list changes (add/remove/reorder) require a full reparse.
+      refreshNotebookParse(notebookPanel.context.path, notebook);
+      connectCellContentListeners();
+    };
+    notebookModel.cells.changed.connect(handleNotebookCellsChanged);
+
+    const handleNotebookSaveState = (
+      _: unknown,
+      saveState: 'started' | 'failed' | 'completed'
+    ) => {
+      if (saveState !== 'completed') {
+        return;
+      }
+
+      const allCells = refreshNotebookParse(notebookPanel.context.path, notebook);
+      const appendCellContentUpdatedHistoryEvent = useJupytutorReactState
+        .getState()
+        .appendCellContentUpdatedHistoryEvent(notebookPanel.context.path);
+
+      for (const cell of allCells) {
+        if (cell.type !== 'markdown') {
+          continue;
+        }
+        appendCellContentUpdatedHistoryEvent(cell.id)(cell.text);
+      }
+    };
+    notebookPanel.context.saveState.connect(handleNotebookSaveState);
+
     // TODO use this detach
-    return detachMetadata;
+    return () => {
+      detachMetadata();
+      disconnectCellContentListeners();
+      notebookModel.cells.changed.disconnect(handleNotebookCellsChanged);
+      notebookPanel.context.saveState.disconnect(handleNotebookSaveState);
+    };
   } catch (error) {
     // TODO finally return detach
     console.error('Error gathering context:', error);
@@ -260,11 +474,27 @@ const plugin: JupyterFrontEndPlugin<void> = {
     useJupytutorReactState.setState({ userId, jupyterhubHostname });
 
     // Gather context when a notebook is opened or becomes active
-    notebookTracker.currentChanged.connect(attachNotebook);
+    let detachCurrentNotebook = () => {};
+
+    const attachNotebookAndTrack = async (
+      notebookPanel: NotebookPanel | null
+    ) => {
+      detachCurrentNotebook();
+      detachCurrentNotebook = () => {};
+
+      const detach = await attachNotebook(notebookTracker, notebookPanel);
+      if (typeof detach === 'function') {
+        detachCurrentNotebook = detach;
+      }
+    };
+
+    notebookTracker.currentChanged.connect((_, notebookPanel) => {
+      void attachNotebookAndTrack(notebookPanel);
+    });
 
     // Also gather context immediately if there's already an active notebook
     if (notebookTracker.currentWidget) {
-      attachNotebook(notebookTracker, notebookTracker.currentWidget);
+      void attachNotebookAndTrack(notebookTracker.currentWidget);
     }
 
     // Listen for the execution of a cell. [1, 3, 6]
@@ -310,6 +540,28 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         const proactiveEnabledForCell =
           cellConfig.chatProactive && proactiveEnabledForSession;
+
+        if (cell.model.type === 'code') {
+          const codeCell = cell.model as CodeCellModel;
+          useJupytutorReactState
+            .getState()
+            .appendCellContentUpdatedHistoryEvent(notebookPath)(cell.model.id)(
+            codeCell.sharedModel.getSource()
+          );
+
+          const runHistoryEvent: PromptContextCodeCellHistory = {
+            timestamp: Date.now(),
+            type: 'cell run',
+            hadError: !success,
+            output: cellRunOutputFromModel(codeCell)
+          };
+
+          useJupytutorReactState
+            .getState()
+            .appendCellHistoryEvent(notebookPath)(cell.model.id)(
+            runHistoryEvent
+          );
+        }
 
         if (cellConfig.chatEnabled && proactiveEnabledForCell) {
           refreshNotebookParse(notebookPath, notebook);

@@ -1,6 +1,7 @@
 import { CodeCellModel, ICellModel } from '@jupyterlab/cells';
 import { Notebook } from '@jupyterlab/notebook';
 import { IOutputModel } from '@jupyterlab/rendermime';
+import memoizee from 'memoizee';
 
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
@@ -44,7 +45,7 @@ const parseNB = (notebook: Notebook): ParsedCell[] => {
  * step (as it already is in data8, with 'otter-answer-cell' as a tag)
  * @param cell - The cell to parse
  */
-function parseCellModel(cell: ICellModel): ParsedCell {
+export function parseCellModel(cell: ICellModel): ParsedCell {
   // console.log(cell, cell.id, cell.type);
   // console.log(cell.sharedModel.getSource());
 
@@ -66,7 +67,10 @@ function parseCellModel(cell: ICellModel): ParsedCell {
         ? 'code'
         : 'unknown';
   const text = cell.sharedModel.getSource();
-  const parsedMarkdown = parseCellMarkdown(text);
+  const parsedMarkdown =
+    type === 'markdown'
+      ? parseCellMarkdownMemoized(text)
+      : EMPTY_PARSED_MARKDOWN;
 
   const outputs = [];
   if (type === 'code') {
@@ -89,6 +93,11 @@ function parseCellModel(cell: ICellModel): ParsedCell {
   };
 }
 
+const EMPTY_PARSED_MARKDOWN: { links: string[]; imageSources: string[] } = {
+  links: [],
+  imageSources: []
+};
+
 function parseCellMarkdown(text: string): {
   links: string[];
   imageSources: string[];
@@ -106,5 +115,10 @@ function parseCellMarkdown(text: string): {
       .filter(url => url !== undefined) as string[]
   };
 }
+
+const parseCellMarkdownMemoized = memoizee(parseCellMarkdown, {
+  primitive: true,
+  max: 2000
+});
 
 export default parseNB;
