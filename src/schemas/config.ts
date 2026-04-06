@@ -148,7 +148,14 @@ export const ConfigSchema = z.object({
     .describe(
       "User preferences set for the plugin; generally shouldn't be included as part of an assignment, but rather set after the notebook has been started by the student."
     )
-    .prefault({})
+    .prefault({}),
+
+  extraMetadata: z
+    .unknown()
+    .optional()
+    .describe(
+      'Arbitrary metadata to be sent alongside API requests. Can be any value.'
+    )
 });
 
 export type PluginConfig = z.output<typeof ConfigSchema>;
