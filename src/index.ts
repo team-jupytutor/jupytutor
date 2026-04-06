@@ -28,7 +28,8 @@ import { ConfigSchema, PluginConfig } from './schemas/config';
 import { ensureDraftHasNotebook, useJupytutorReactState } from './store';
 
 const JupytutorCellMetadataSchema = z.object({
-  cellConfig: z.unknown().optional()
+  cellConfig: z.unknown().optional(),
+  extraMetadata: z.unknown().optional()
 });
 
 const JUPYTUTOR_CONTAINER_CLASS = 'jp-jupytutor-container';
@@ -132,9 +133,10 @@ const refreshCellConfig = (
   notebookConfig: PluginConfig
 ) => {
   const cellIndex = [...notebookModel.cells].findIndex(c => c === cellModel);
-  const cellMetadataConfig = JupytutorCellMetadataSchema.safeParse(
+  const parsedCellMetadata = JupytutorCellMetadataSchema.safeParse(
     cellModel.getMetadata('jupytutor')
-  ).data?.cellConfig;
+  ).data;
+  const cellMetadataConfig = parsedCellMetadata?.cellConfig;
   const cellConfig = applyConfigRules(
     notebookModel,
     cellIndex,
@@ -144,6 +146,9 @@ const refreshCellConfig = (
   useJupytutorReactState.getState().setRefreshedCellConfig(notebookPath)(
     cellModel.id
   )(cellConfig);
+  useJupytutorReactState.getState().setRefreshedCellExtraMetadata(notebookPath)(
+    cellModel.id
+  )(parsedCellMetadata?.extraMetadata);
   devLog(() => ({ cellConfig }));
 
   return cellConfig;

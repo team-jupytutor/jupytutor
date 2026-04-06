@@ -9,7 +9,8 @@ import {
   useIsLoading,
   useJupytutorReactState,
   useLiveResult,
-  useNotebookConfig
+  useNotebookConfig,
+  useCellExtraMetadata
 } from '../../store';
 import { devLog } from '../devLog';
 import { ParsedCell } from '../parseNB';
@@ -46,6 +47,7 @@ export const useQueryAPIFunction = () => {
   const jupyterhubHostname = useJupytutorReactState(
     state => state.jupyterhubHostname
   );
+  const cellExtraMetadata = useCellExtraMetadata();
   const appendCellHistoryEvent = useJupytutorReactState(
     state => state.appendCellHistoryEvent
   );
@@ -116,7 +118,13 @@ export const useQueryAPIFunction = () => {
           jupyterhubHostname: jupyterhubHostname ?? '',
           notebookPath: notebookPath ?? '',
           courseId,
-          assignmentId
+          assignmentId,
+          ...(notebookConfig?.extraMetadata !== undefined
+            ? { notebookExtraMetadata: notebookConfig.extraMetadata }
+            : {}),
+          ...(cellExtraMetadata !== undefined
+            ? { cellExtraMetadata }
+            : {})
         };
 
         devLog(
@@ -249,7 +257,8 @@ export const useQueryAPIFunction = () => {
       notebookPath,
       baseURL,
       globalNotebookContextRetriever,
-      parsedCells
+      parsedCells,
+      cellExtraMetadata
     ]
   );
 

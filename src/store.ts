@@ -17,6 +17,7 @@ export type JupytutorCellState = {
   // this is something of a cache -- we refetch for a particular cell
   // when it's executed, which is when we consider whether to show for that cell
   cellConfig: RuleConfigOverride | null;
+  cellExtraMetadata: unknown;
   history: PromptContextCellHistoryEvent[];
 
   chatHistory: ChatHistoryItem[];
@@ -26,6 +27,7 @@ export type JupytutorCellState = {
 
 const DEFAULT_WIDGET_STATE: () => JupytutorCellState = () => ({
   cellConfig: null,
+  cellExtraMetadata: undefined,
   history: [],
 
   chatHistory: [],
@@ -66,6 +68,9 @@ type JupytutorReactState = {
   setRefreshedCellConfig: (
     notebookPath: string
   ) => (cellId: string) => (cellConfig: RuleConfigOverride) => void;
+  setRefreshedCellExtraMetadata: (
+    notebookPath: string
+  ) => (cellId: string) => (extraMetadata: unknown) => void;
 
   setNotebookConfig: (
     notebookPath: string
@@ -210,6 +215,18 @@ export const useJupytutorReactState = create<JupytutorReactState>()(
         set(state => {
           return produce(state, draft => {
             cellData(draft, notebookPath, cellId).cellConfig = cellConfig;
+          });
+        });
+      },
+
+    setRefreshedCellExtraMetadata:
+      (notebookPath: string) =>
+      (cellId: string) =>
+      (extraMetadata: unknown) => {
+        set(state => {
+          return produce(state, draft => {
+            cellData(draft, notebookPath, cellId).cellExtraMetadata =
+              extraMetadata;
           });
         });
       },
@@ -362,4 +379,14 @@ export const useCellConfig = () => {
       state.notebookStateByPath[notebookPath]?.jupytutorStateByCellId[cellId]
   );
   return cellState.cellConfig;
+};
+
+export const useCellExtraMetadata = () => {
+  const notebookPath = useNotebookPath();
+  const cellId = useCellId();
+  const cellState = useJupytutorReactState(
+    state =>
+      state.notebookStateByPath[notebookPath]?.jupytutorStateByCellId[cellId]
+  );
+  return cellState?.cellExtraMetadata;
 };
