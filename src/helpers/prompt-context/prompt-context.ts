@@ -1,6 +1,7 @@
 import { useJupytutorReactState } from '../../store';
 import { ParsedCell } from '../parseNB';
 import GlobalNotebookContextRetrieval, {
+  ScrapeRef,
   STARTING_TEXTBOOK_CONTEXT
 } from './globalNotebookContextRetrieval';
 
@@ -242,7 +243,7 @@ const filterOutChatEvents = (
 export type PromptContext = {
   resources: {
     _description: string;
-    [key: string]: string;
+    [key: string]: string | ScrapeRef;
   };
   notebook: {
     overview: string;
@@ -266,10 +267,11 @@ export const getPromptContextFromCells = async (
   notebookPath: string,
   cells: ParsedCell[],
   contextRetriever: GlobalNotebookContextRetrieval | null,
-  activeCellId: string
+  activeCellId: string,
+  baseURL: string
 ): Promise<PromptContext> => {
-  const globalNotebookContext: Record<string, string> = contextRetriever
-    ? ((await contextRetriever.getContext()) ?? {})
+  const globalNotebookContext: Record<string, ScrapeRef> = contextRetriever
+    ? await contextRetriever.getResources(baseURL)
     : {};
   const activeCell = cells.find(c => c.id === activeCellId);
   const activeCellIndex = cells.findIndex(c => c.id === activeCellId);

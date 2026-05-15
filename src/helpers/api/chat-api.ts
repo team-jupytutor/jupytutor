@@ -15,6 +15,7 @@ import {
 import { devLog } from '../devLog';
 import { ParsedCell } from '../parseNB';
 import { getPromptContextFromCells } from '../prompt-context/prompt-context';
+import { buildAPIURL, normalizeAPIBaseURL } from './base-url';
 
 type V2InputChunk =
   | {
@@ -33,7 +34,7 @@ export const useQueryAPIFunction = () => {
     state => state.notebookStateByPath[notebookPath]?.parsedCells ?? []
   );
   const [notebookConfig] = useNotebookConfig();
-  const baseURL = notebookConfig?.api.baseURL ?? '';
+  const baseURL = normalizeAPIBaseURL(notebookConfig?.api.baseURL ?? '');
   const globalNotebookContextRetriever = useJupytutorReactState(
     state =>
       state.notebookStateByPath[notebookPath]?.globalNotebookContextRetriever ??
@@ -71,7 +72,8 @@ export const useQueryAPIFunction = () => {
         notebookPath,
         parsedCells,
         globalNotebookContextRetriever,
-        cellId
+        cellId,
+        baseURL
       );
 
       devLog(
@@ -131,14 +133,14 @@ export const useQueryAPIFunction = () => {
           () => 'Sending v2 API request:',
           () => {
             return {
-              endpoint: `${baseURL}interaction/v2/stream`,
+              endpoint: buildAPIURL(baseURL, 'interaction/v2/stream'),
               imageCount: images.length,
               promptContextKeys: Object.keys(promptContext.resources ?? {})
             };
           }
         );
 
-        const response = await fetch(`${baseURL}interaction/v2/stream`, {
+        const response = await fetch(buildAPIURL(baseURL, 'interaction/v2/stream'), {
           method: 'POST',
           body: JSON.stringify(requestBody),
           headers: {

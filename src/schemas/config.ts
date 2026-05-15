@@ -1,4 +1,5 @@
 import z from 'zod';
+import { normalizeAPIBaseURL } from '../helpers/api/base-url';
 import { PredicateSchema } from './predicate';
 
 export const RuleConfigOverrideSchema = z.object({
@@ -30,7 +31,10 @@ export const ConfigSchema = z.object({
 
   api: z
     .object({
-      baseURL: z.url().default('http://localhost:3000/')
+      baseURL: z
+        .url()
+        .default('http://localhost:3000/')
+        .transform(normalizeAPIBaseURL)
     })
     .prefault({}),
 
