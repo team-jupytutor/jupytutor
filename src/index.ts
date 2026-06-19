@@ -456,21 +456,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
   autoStart: true,
   requires: [INotebookTracker],
   activate: async (app: JupyterFrontEnd, notebookTracker: INotebookTracker) => {
-    if (
-      !(
-        window.location.host === 'data8.datahub.berkeley.edu' ||
-        window.location.host === 'data8-staging.datahub.berkeley.edu' ||
-        window.location.host === 'prob140.datahub.berkeley.edu' ||
-        window.location.host === 'prob140-staging.datahub.berkeley.edu' ||
-        window.location.hostname === 'localhost'
-      )
-    ) {
-      // bail early while we work on early versions of the plugin --
-      //   don't want to have negative impact on `datahub.berkeley.edu`,
-      //   including possibly leaking notebook watchers / json metadata parsers
-      return;
-    }
-
     patchKeyCommand750(app);
 
     // Get the DataHub user identifier and JupyterHub hostname
