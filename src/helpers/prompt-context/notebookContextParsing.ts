@@ -32,13 +32,14 @@ export const parseContextFromNotebook = async (
   );
 
   // Create ContextRetrieval instance with the gathered links
-  return new GlobalNotebookContextRetrieval({
+  const contextRetriever = new GlobalNotebookContextRetrieval({
     sourceLinks: uniqueLinks,
     whitelistedURLs: pluginConfig.remoteContextGathering.whitelist, // whitelisted URLs
     blacklistedURLs: pluginConfig.remoteContextGathering.blacklist, // blacklisted URLs
-    jupyterbookURLs: pluginConfig.remoteContextGathering.jupyterbook.urls, // jupyterbook URL
-    attemptJupyterbookLinkExpansion:
-      pluginConfig.remoteContextGathering.jupyterbook.linkExpansion, // attempt JupyterBook link expansion
+    enabled: pluginConfig.remoteContextGathering.enabled,
     debug: false // debug mode
   });
+
+  contextRetriever.prefetch(pluginConfig.api.baseURL);
+  return contextRetriever;
 };
