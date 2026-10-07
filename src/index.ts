@@ -2,6 +2,7 @@ import {
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
+import { CommandToolbarButton, ICommandPalette } from '@jupyterlab/apputils';
 import { Cell, CodeCellModel, ICellModel } from '@jupyterlab/cells';
 import {
   INotebookModel,
@@ -33,11 +34,33 @@ const JupytutorCellMetadataSchema = z.object({
 });
 
 const JUPYTUTOR_CONTAINER_CLASS = 'jp-jupytutor-container';
+const JUPYTUTOR_REACTIVATION_CONTROL_CLASS =
+  'jp-jupytutor-reactivation-control';
+const TOGGLE_PROACTIVE_PROMPTS_COMMAND = 'jupytutor:toggle-proactive-prompts';
+const PROACTIVE_PROMPTS_TOOLBAR_ITEM = 'jupytutor-proactive-prompts';
 
 const removeJupytutorContainer = (cell: Cell) => {
   cell.node
     .querySelectorAll(`.${JUPYTUTOR_CONTAINER_CLASS}`)
     .forEach(container => container.remove());
+};
+
+const addJupytutorWidget = (cell: Cell, notebookPath: string) => {
+  const jupytutor = new JupytutorWidget({
+    cellId: cell.model.id,
+    notebookPath
+  });
+
+  removeJupytutorContainer(cell);
+
+  const container = document.createElement('div');
+  container.className = JUPYTUTOR_CONTAINER_CLASS;
+  container.appendChild(jupytutor.node);
+  cell.node.appendChild(container);
+
+  requestAnimationFrame(() => {
+    jupytutor.update();
+  });
 };
 
 /**
@@ -58,6 +81,15 @@ const parseConfiguration = (config: unknown): PluginConfig => {
 const loadConfigurationFromNotebookModel = (notebookModel: INotebookModel) => {
   const rawConfig = notebookModel.getMetadata('jupytutor') ?? {};
   return parseConfiguration(rawConfig);
+};
+
+export const setProactiveEnabled = (
+  notebookConfig: PluginConfig,
+  proactiveEnabled: boolean
+): PluginConfig => {
+  return produce(notebookConfig, draft => {
+    draft.preferences.proactiveEnabled = proactiveEnabled;
+  });
 };
 
 const attachNotebookMetadata = (
@@ -389,10 +421,11 @@ const attachNotebook = async (
     const connectCellContentListeners = () => {
       disconnectCellContentListeners();
       for (const cellModel of notebookModel.cells) {
-        const slot: Parameters<typeof cellModel.contentChanged.connect>[0] =
-          () => {
-            handleSingleCellContentChanged(cellModel);
-          };
+        const slot: Parameters<
+          typeof cellModel.contentChanged.connect
+        >[0] = () => {
+          handleSingleCellContentChanged(cellModel);
+        };
         cellModel.contentChanged.connect(slot);
         cellContentListenerDisconnects.set(cellModel.id, () => {
           cellModel.contentChanged.disconnect(slot);
@@ -419,7 +452,10 @@ const attachNotebook = async (
         return;
       }
 
-      const allCells = refreshNotebookParse(notebookPanel.context.path, notebook);
+      const allCells = refreshNotebookParse(
+        notebookPanel.context.path,
+        notebook
+      );
       const appendCellContentUpdatedHistoryEvent = useJupytutorReactState
         .getState()
         .appendCellContentUpdatedHistoryEvent(notebookPanel.context.path);
@@ -454,14 +490,84 @@ const plugin: JupyterFrontEndPlugin<void> = {
   description:
     'A Jupyter extension for providing students LLM feedback based on autograder results and supplied course context.',
   autoStart: true,
-  requires: [INotebookTracker],
-  activate: async (app: JupyterFrontEnd, notebookTracker: INotebookTracker) => {
+  requires: [INotebookTracker, ICommandPalette],
+  activate: async (
+    app: JupyterFrontEnd,
+    notebookTracker: INotebookTracker,
+    palette: ICommandPalette
+  ) => {
     patchKeyCommand750(app);
 
     // Get the DataHub user identifier and JupyterHub hostname
     const userId = getUserIdentifierFromURL();
     const jupyterhubHostname = window.location.hostname;
     useJupytutorReactState.setState({ userId, jupyterhubHostname });
+
+    const getActiveNotebookConfig = () => {
+      const notebookPath = notebookTracker.currentWidget?.context.path;
+      if (!notebookPath) {
+        return null;
+      }
+      return (
+        useJupytutorReactState.getState().notebookStateByPath[notebookPath]
+          ?.notebookConfig ?? null
+      );
+    };
+
+    app.commands.addCommand(TOGGLE_PROACTIVE_PROMPTS_COMMAND, {
+      label: () => {
+        const notebookConfig = getActiveNotebookConfig();
+        return notebookConfig?.preferences.proactiveEnabled
+          ? 'Jupytutor: Pause proactive prompts'
+          : 'Jupytutor: Turn on proactive prompts';
+      },
+      caption:
+        'Turn automatic Jupytutor prompts on or off for the current notebook.',
+      isEnabled: () => Boolean(getActiveNotebookConfig()?.pluginEnabled),
+      execute: () => {
+        const notebookPath = notebookTracker.currentWidget?.context.path;
+        const notebookConfig = getActiveNotebookConfig();
+        if (!notebookPath || !notebookConfig || !notebookConfig.pluginEnabled) {
+          return;
+        }
+
+        useJupytutorReactState.getState().setNotebookConfig(notebookPath)(
+          setProactiveEnabled(
+            notebookConfig,
+            !notebookConfig.preferences.proactiveEnabled
+          )
+        );
+        app.commands.notifyCommandChanged(TOGGLE_PROACTIVE_PROMPTS_COMMAND);
+      }
+    });
+    palette.addItem({
+      command: TOGGLE_PROACTIVE_PROMPTS_COMMAND,
+      category: 'Jupytutor'
+    });
+
+    const addProactivePromptsToolbarButton = (
+      notebookPanel: NotebookPanel | null
+    ) => {
+      if (!notebookPanel || !getActiveNotebookConfig()?.pluginEnabled) {
+        return;
+      }
+
+      if (
+        Array.from(notebookPanel.toolbar.names()).includes(
+          PROACTIVE_PROMPTS_TOOLBAR_ITEM
+        )
+      ) {
+        return;
+      }
+
+      notebookPanel.toolbar.addItem(
+        PROACTIVE_PROMPTS_TOOLBAR_ITEM,
+        new CommandToolbarButton({
+          commands: app.commands,
+          id: TOGGLE_PROACTIVE_PROMPTS_COMMAND
+        })
+      );
+    };
 
     // Gather context when a notebook is opened or becomes active
     let detachCurrentNotebook = () => {};
@@ -476,6 +582,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (typeof detach === 'function') {
         detachCurrentNotebook = detach;
       }
+      addProactivePromptsToolbarButton(notebookPanel);
+      app.commands.notifyCommandChanged(TOGGLE_PROACTIVE_PROMPTS_COMMAND);
     };
 
     notebookTracker.currentChanged.connect((_, notebookPanel) => {
@@ -556,25 +664,47 @@ const plugin: JupyterFrontEndPlugin<void> = {
         if (cellConfig.chatEnabled && proactiveEnabledForCell) {
           refreshNotebookParse(notebookPath, notebook);
 
-          const jupytutor = new JupytutorWidget({
-            cellId: cell.model.id,
-            notebookPath
-          });
-
-          // Remove any existing JupyTutor widgets before re-rendering
+          addJupytutorWidget(cell, notebookPath);
+        } else if (
+          cellConfig.chatEnabled &&
+          cellConfig.chatProactive &&
+          !proactiveEnabledForSession
+        ) {
+          // Keep a small way to re-enable proactive prompts after a student
+          // has paused them, without rendering a full chat widget.
           removeJupytutorContainer(cell);
 
-          // Create a proper container div with React mounting point
           const container = document.createElement('div');
-          container.className = JUPYTUTOR_CONTAINER_CLASS;
+          container.className = `${JUPYTUTOR_CONTAINER_CLASS} ${JUPYTUTOR_REACTIVATION_CONTROL_CLASS}`;
 
-          container.appendChild(jupytutor.node);
-          cell.node.appendChild(container);
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'jupytutor-reactivation-button';
+          button.textContent = '…';
+          button.title = 'Turn on Jupytutor for this notebook';
+          button.setAttribute(
+            'aria-label',
+            'Turn on Jupytutor for this notebook'
+          );
+          button.addEventListener('click', () => {
+            const currentConfig =
+              useJupytutorReactState.getState().notebookStateByPath[
+                notebookPath
+              ]?.notebookConfig;
+            if (!currentConfig) {
+              return;
+            }
 
-          // Ensure React renders by calling update after DOM insertion
-          requestAnimationFrame(() => {
-            jupytutor.update();
+            useJupytutorReactState.getState().setNotebookConfig(notebookPath)(
+              setProactiveEnabled(currentConfig, true)
+            );
+            app.commands.notifyCommandChanged(TOGGLE_PROACTIVE_PROMPTS_COMMAND);
+            refreshNotebookParse(notebookPath, notebook);
+            addJupytutorWidget(cell, notebookPath);
           });
+
+          container.appendChild(button);
+          cell.node.appendChild(container);
         } else {
           removeJupytutorContainer(cell);
         }

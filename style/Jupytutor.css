@@ -1,4 +1,5 @@
 /* Use a container class to avoid style collisions with JupyterLab */
+
 .jupytutor {
   background-color: rgba(128, 128, 128, 0.04);
   border: 2px solid var(--jp-border-color0);
@@ -10,17 +11,53 @@
   transition: all 0.3s ease;
 }
 
+/* A compact reactivation affordance shown after a qualifying cell when a
+   student has paused proactive prompts for this notebook. */
+
+.jp-jupytutor-reactivation-control {
+  display: flex;
+  justify-content: flex-end;
+  margin: 4px 6px;
+}
+
+.jupytutor-reactivation-button {
+  background: transparent;
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 12px;
+  color: var(--jp-content-font-color2);
+  cursor: pointer;
+  font-family: var(--jp-ui-font-family);
+  font-size: 18px;
+  line-height: 1;
+  min-height: 24px;
+  min-width: 30px;
+  padding: 0 6px 4px;
+}
+
+.jupytutor-reactivation-button:hover,
+
+.jupytutor-reactivation-button:focus-visible {
+  background: var(--jp-layout-color2);
+  border-color: var(--jp-brand-color1);
+  color: var(--jp-brand-color1);
+  outline: none;
+}
+
 /* Loading state for the entire jupytutor container */
+
 .jupytutor.loading {
   animation: subtleGlow 3s ease-in-out infinite;
 }
 
 /* Subtle glow animation for the container */
+
 @keyframes subtleGlow {
   0%,
+  
   100% {
     filter: brightness(1);
   }
+  
   50% {
     filter: brightness(1.02);
   }
@@ -33,6 +70,7 @@
 
 .jupytutor button {
   /* Use JupyterLab's themed button style for a native look and feel */
+  
   background-color: var(--jp-brand-color1);
   color: white;
   border: none;
@@ -84,11 +122,13 @@
 }
 
 /* Subtle border color change on hover for better integration */
+
 .tailoredOptionsContainer:hover {
   border-left-color: var(--jp-border-color1);
 }
 
 /* Loading state for suggestions */
+
 .tailoredOptionsContainer.loading {
   animation: suggestionsPulse 2s ease-in-out infinite;
   opacity: 0.5;
@@ -100,6 +140,7 @@
     opacity: 1;
     transform: translateY(0);
   }
+  
   50% {
     opacity: 0.8;
     transform: translateY(-2px);
@@ -111,6 +152,7 @@
     opacity: 0;
     transform: translateY(20px);
   }
+  
   100% {
     opacity: 1;
     transform: translateY(0);
@@ -183,6 +225,7 @@
 }
 
 /* Chat Bubble Styles */
+
 .chat-container {
   display: flex;
   flex-direction: column;
@@ -196,6 +239,7 @@
   scrollbar-width: thin;
   scrollbar-color: var(--jp-border-color0) transparent;
   /* Smooth scrolling */
+  
   scroll-behavior: smooth;
 }
 
@@ -296,6 +340,7 @@
 }
 
 /* Chat Bubble Animation */
+
 .chat-bubble {
   opacity: 0;
   transform: translateY(20px);
@@ -310,6 +355,7 @@
 }
 
 /* Assistant Message Styles */
+
 .assistant-message {
   opacity: 0;
   transform: translateY(20px);
@@ -445,6 +491,7 @@
 }
 
 /* ReactMarkdown Content Styles */
+
 .assistant-message h1,
 .assistant-message h2,
 .assistant-message h3,
@@ -537,28 +584,35 @@
 }
 
 /* Stagger animation for multiple chat bubbles */
+
 .chat-container .chat-bubble:nth-child(1) {
   transition-delay: 0.1s;
 }
+
 .chat-container .chat-bubble:nth-child(2) {
   transition-delay: 0.2s;
 }
+
 .chat-container .chat-bubble:nth-child(3) {
   transition-delay: 0.3s;
 }
+
 .chat-container .chat-bubble:nth-child(4) {
   transition-delay: 0.4s;
 }
+
 .chat-container .chat-bubble:nth-child(5) {
   transition-delay: 0.5s;
 }
 
 /* Remove bottom margin from last message to eliminate bottom padding */
+
 .chat-container .chat-message-wrapper:last-child {
   margin-bottom: 0;
 }
 
 /* Chat Input Styles */
+
 .chat-input-container {
   display: flex;
   align-items: center;
@@ -645,6 +699,7 @@
 }
 
 /* Streaming Message Wrapper */
+
 .streaming-message {
   display: flex;
   flex-direction: column;
@@ -653,6 +708,7 @@
 }
 
 /* Streaming Indicator */
+
 .streaming-indicator {
   display: flex;
   align-items: center;
@@ -660,6 +716,7 @@
 }
 
 /* Typing Dots Animation */
+
 .typing-dots {
   display: flex;
   gap: 4px;
@@ -695,6 +752,7 @@
     opacity: 0.6;
     transform: scale(1);
   }
+  
   30% {
     opacity: 1;
     transform: scale(1.2);
@@ -702,12 +760,14 @@
 }
 
 /* Loading State Styles */
+
 .chat-submit-btn.loading {
   background-color: var(--jp-brand-color1);
   pointer-events: none;
 }
 
 /* Enhanced loading animations for the entire input container */
+
 .chat-input-container.loading {
   animation: containerPulse 2s ease-in-out infinite;
   position: relative;
@@ -732,6 +792,7 @@
 }
 
 /* Loading state for the input field */
+
 .chat-input.loading {
   border-color: var(--jp-brand-color1);
   animation: inputPulse 2s ease-in-out infinite;
@@ -739,6 +800,7 @@
 }
 
 /* Loading state for placeholder text */
+
 .chat-input.loading::placeholder {
   animation: textPulse 1.5s ease-in-out infinite;
   font-style: italic;
@@ -746,12 +808,14 @@
 }
 
 /* Container pulse animation */
+
 @keyframes containerPulse {
   0%,
   100% {
     transform: scale(1);
     opacity: 1;
   }
+  
   50% {
     transform: scale(1.01);
     opacity: 0.95;
@@ -759,25 +823,30 @@
 }
 
 /* Light sweep animation */
+
 @keyframes lightSweep {
   0% {
     left: -100%;
   }
+  
   50% {
     left: 100%;
   }
+  
   100% {
     left: 100%;
   }
 }
 
 /* Input field pulse animation */
+
 @keyframes inputPulse {
   0%,
   100% {
     border-color: var(--jp-brand-color1);
     box-shadow: 0 0 0 3px rgba(var(--jp-brand-color1-rgb, 0, 123, 255), 0.1);
   }
+  
   50% {
     border-color: var(--jp-brand-color0);
     box-shadow: 0 0 0 3px rgba(var(--jp-brand-color1-rgb, 0, 123, 255), 0.2);
@@ -785,12 +854,14 @@
 }
 
 /* Text pulse animation */
+
 @keyframes textPulse {
   0%,
   100% {
     opacity: 0.7;
     transform: scale(1);
   }
+  
   50% {
     opacity: 1;
     transform: scale(1.02);
@@ -818,13 +889,15 @@
   0% {
     transform: rotate(0deg);
   }
+  
   100% {
     transform: rotate(360deg);
   }
 }
 
 /* Responsive adjustments */
-@media (max-width: 768px) {
+
+@media (width <= 768px) {
   .chat-input-container {
     gap: 6px;
   }
